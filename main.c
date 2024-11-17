@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include "cpu.h"
+#include "emulator.h"
 
 int main(int argc, char **argv){
-    printf("Hello world!\n"); 
+    emulate();
 }
