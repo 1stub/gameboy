@@ -52,25 +52,30 @@ typedef struct{
 
 typedef struct{
     registers regs;
-    byte IME;
-    word SP;
-    word PC;
+    byte ime;
+    word sp;
+    word pc;
 } CPU;
 
-#define A  regs.a
-#define F  regs.f
-#define AF regs.af
-#define C  regs.c
-#define B  regs.b
-#define CB regs.cb
-#define D  regs.d
-#define E  regs.e
-#define DE regs.de
-#define H  regs.h
-#define L  regs.l
-#define HL regs.hl
+#define PC  cpu.pc
+#define SP  cpu.sp
+#define IME cpu.ime
+
+#define A  cpu.regs.a
+#define F  cpu.regs.f
+#define AF cpu.regs.af
+#define B  cpu.regs.b
+#define C  cpu.regs.c
+#define BC cpu.regs.bc
+#define D  cpu.regs.d
+#define E  cpu.regs.e
+#define DE cpu.regs.de
+#define H  cpu.regs.h
+#define L  cpu.regs.l
+#define HL cpu.regs.hl
 
 byte cycle();
-void execute(byte opcode);
+static void execute(byte opcode);
+void cpu_init();
 
 #endif
