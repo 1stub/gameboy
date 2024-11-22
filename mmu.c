@@ -17,13 +17,12 @@ void write(word address, byte value){
 void load_rom(char *file){
     FILE *fp;
     fp = fopen(file, "rb");
-    size_t ret;
     if(!fp){
         perror("fopen - unable to open argv[2]");
         return ;
     }
 
-    ret = fread(mmu.memory, sizeof(byte), 0xFFFF, fp);
+    size_t ret = fread(mmu.memory, sizeof(byte), 0xFFFF, fp);
     if(!ret){
         fprintf(stderr, "fread() failed: %zu\n", ret);
     }
@@ -32,7 +31,8 @@ void load_rom(char *file){
 }
 
 char perform_serial(){
-    char data = (char)mmu.memory[SB];
     mmu.memory[SC] |= ~(1 << 7);
+
+    const char data = (char)mmu.memory[SB];
     return data;
 }

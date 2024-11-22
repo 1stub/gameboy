@@ -1,5 +1,7 @@
 #include "emulator.h"
 
 void emulate(){ 
-    cycle(); 
+    while(1){
+        cycle(); 
+    }
 }
