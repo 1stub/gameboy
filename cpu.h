@@ -52,6 +52,7 @@ typedef struct{
 
 typedef struct{
     registers regs;
+    byte cycles;
     byte ime;
     word sp;
     word pc;

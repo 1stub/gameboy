@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c23
+CFLAGS = -Wall -Wextra -g -std=c23
 TARGET = gameboy 
 SRCS = main.c emulator.c cpu.c mmu.c 
 OBJS = $(SRCS:.c=.o)
