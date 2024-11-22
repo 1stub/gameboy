@@ -1,17 +1,19 @@
 #include "mmu.h"
 
-extern MMU mmu;
+#define MEM mmu.memory 
 
-void mmu_init(){
+static MMU mmu;
+
+extern void mmu_init(){
 
 }
 
 byte read(word address){
-    return mmu.memory[address];
+    return MEM[address];
 }
 
 void write(word address, byte value){
-    mmu.memory[address] = value;
+    MEM[address] = value;
 }
 
 void load_rom(char *file){
@@ -22,7 +24,7 @@ void load_rom(char *file){
         return ;
     }
 
-    size_t ret = fread(mmu.memory, sizeof(byte), 0xFFFF, fp);
+    size_t ret = fread(MEM, sizeof(byte), 0xFFFF, fp);
     if(!ret){
         fprintf(stderr, "fread() failed: %zu\n", ret);
     }
@@ -31,8 +33,11 @@ void load_rom(char *file){
 }
 
 char perform_serial(){
-    mmu.memory[SC] |= ~(1 << 7);
+    if(!(MEM[SC] & (1 << 7))){
+        return '\0';    
+    }
+    MEM[SC] &= ~(1 << 7);
 
-    const char data = (char)mmu.memory[SB];
+    const char data = (char)MEM[SB];
     return data;
 }

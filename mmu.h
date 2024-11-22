@@ -9,10 +9,10 @@ typedef struct{
     byte memory[0xFFFF];
 }MMU;
 
-void mmu_init();
-byte read(word address);
-void write(word address, byte value);
-void load_rom(char *file);
+extern void mmu_init();
+extern byte read(word address);
+extern void write(word address, byte value);
+extern void load_rom(char *file);
 char perform_serial();
 
 #endif

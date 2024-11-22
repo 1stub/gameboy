@@ -56,6 +56,7 @@ typedef struct{
     byte ime;
     word sp;
     word pc;
+    byte is_halted;
 } CPU;
 
 #define PC  cpu.pc
@@ -78,5 +79,6 @@ typedef struct{
 byte cycle();
 static void execute(byte opcode);
 void cpu_init();
+void print_registers();
 
 #endif
