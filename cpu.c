@@ -3,21 +3,28 @@
 
 CPU cpu;
 
+#define DO_NOTHING -1
+#define RESET 0
+#define SET 1
+
 static const byte cycles[0x100];
 static const byte pc_inc[0x100];
 static const byte extended_cycles[0x100];
 static const byte extended_pc_inc[0x100];
 
-//-1 == reset, 0 == do nothing, else == set
+//-1 == do nothing, 0 == reset, else == set
 static inline void SET_FLAGS(int z, int n, int h, int c){
-    if(z == -1) F &= ~(FLAG_Z);
-    else if(z > 0) F |= FLAG_Z;
-    if(n == -1) F &= ~(FLAG_N);
-    else if(n > 0) F |= FLAG_N;
-    if(h == -1) F &= ~(FLAG_H); 
-    else if(h > 0) F |= FLAG_H;
-    if(c == -1) F &= ~(FLAG_C);
-    else if(c > 0) F |= FLAG_C;
+    if (z == RESET) F &= ~(FLAG_Z);
+    else if (z == SET) F |= FLAG_Z;
+
+    if (n == RESET) F &= ~(FLAG_N);
+    else if (n == SET) F |= FLAG_N;
+
+    if (h == RESET) F &= ~(FLAG_H); 
+    else if (h == SET) F |= FLAG_H;
+
+    if (c == RESET) F &= ~(FLAG_C);
+    else if (c == SET) F |= FLAG_C;
 }
 
 void cpu_init(){
@@ -71,14 +78,150 @@ static inline void LD16(word *dst, word val){
     *dst = val;
 }
 
-static inline void INC(byte *dst, byte val){
+static inline void LDA8(){
+    word addr = read16(PC+1);
+    byte low = SP & 0x00FF;
+    byte high = SP >> 8;
+    write(addr, low); addr++;
+    write(addr, high);
+}
+
+static inline void INC(byte *dst){
     const byte dst_val = *dst;
     *dst += 1;
     SET_FLAGS(*dst == 0, 
-            -1, 
-            ((dst_val & 0x0F) + (val & 0x0F)) > 0x0F, 
-            0 
+            RESET, 
+            ((dst_val & 0x0F) + (1 & 0x0F)) > 0x0F, 
+            DO_NOTHING 
     ); 
+}
+
+static inline void INC_MEM(word address){
+    const byte old_mem_val = read(address);
+    write(address, old_mem_val + 1);
+    SET_FLAGS(read(address) == 0, 
+            RESET, 
+            ((old_mem_val & 0x0F) + (1 & 0x0F)) > 0x0F, 
+            DO_NOTHING 
+    ); 
+}
+
+static inline void DEC(byte *dst){
+    const byte dst_val = *dst;
+    *dst -= 1;
+    SET_FLAGS(*dst == 0, 
+            SET, 
+            !(dst_val & 0xFF), 
+            DO_NOTHING 
+    ); 
+}
+
+static inline void DEC_MEM(word address){
+    const byte old_mem_val = read(address);
+    write(address, old_mem_val - 1);
+    SET_FLAGS(read(address) == 0, 
+            SET, 
+            !(old_mem_val & 0x0F), 
+            DO_NOTHING 
+    ); 
+}
+
+static inline void RLA(){ 
+    const byte carry_val = F & FLAG_C;
+    const byte will_carry = A & ( 1 << 7 );
+    A <<= 1;
+    if(carry_val) A += 1;
+    SET_FLAGS(RESET, 
+            RESET, 
+            RESET, 
+            will_carry 
+    ); 
+}
+
+static inline void RRA(){
+    const byte carry_val = F & FLAG_C;
+    const byte will_carry = A & 0x01;
+    A >>= 1;
+    if(carry_val) A |= (1<<7);
+    SET_FLAGS(RESET, 
+            RESET, 
+            RESET, 
+            will_carry 
+    ); 
+}
+
+static inline void RLCA(){
+    const byte will_carry = A & ( 1 << 7 );
+    A <<= 1;
+    if(will_carry) A += 1;
+    SET_FLAGS(RESET, 
+            RESET, 
+            RESET, 
+            will_carry 
+    ); 
+}
+
+static inline void RRCA(){
+    const byte will_carry = A & 0x01;
+    A >>= 1;
+    if(will_carry) A |= (1<<7);
+    SET_FLAGS(RESET, 
+            RESET, 
+            RESET, 
+            will_carry 
+    ); 
+}
+
+//https://blog.ollien.com/posts/gb-daa/ 
+static inline void DAA(){
+    byte should_carry = 0;
+    byte half_carry = F & FLAG_H;
+    byte carry = F & FLAG_C;
+    byte subtract = F & FLAG_N;
+    
+    const byte dst_val = A;
+    byte offset = 0;
+    if((subtract == 0 && ((dst_val & 0x0F) > 0x09)) || half_carry == 1){
+        offset |= 0x06;
+    }
+
+    if((subtract == 0 &&  dst_val > 0x99) || carry == 1){
+        offset |= 0x60;
+        should_carry = 1;
+    }
+
+    A = subtract ? dst_val - offset : dst_val + offset;
+    SET_FLAGS(A == 0, 
+            DO_NOTHING, 
+            RESET, 
+            (dst_val > 0x99 && subtract == 0) || should_carry  
+    ); 
+}
+
+static inline void SCF(){
+    SET_FLAGS(DO_NOTHING, 
+            RESET, 
+            RESET, 
+            SET  
+    );    
+}
+
+static inline void CPL(){
+    A = ~A;
+    SET_FLAGS(DO_NOTHING, 
+            SET, 
+            SET, 
+            DO_NOTHING  
+    );  
+}
+
+static inline void CCF(){
+    const byte carry_set = F & FLAG_C;
+    SET_FLAGS(DO_NOTHING, 
+            RESET, 
+            RESET, 
+            !carry_set  
+    );  
 }
 
 static inline void HALT(){
@@ -90,9 +233,20 @@ static inline void ADD(byte* dst, byte val) {
     const word result = dst_val + val;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
-            -1, 
+            RESET, 
             ((dst_val & 0x0F) + (val & 0x0F)) > 0x0F, 
             result > 0xFF
+    ); 
+}
+
+static inline void ADD16(word* dst, word val) {
+    const word dst_val = *dst;
+    const int result = dst_val + val;
+    *dst = (word)result;
+    SET_FLAGS(DO_NOTHING, 
+            RESET, 
+            ((dst_val & 0x0FFF) + (val & 0x0FFF)) > 0x0FFF, 
+            result > 0xFFFF
     ); 
 }
 
@@ -102,7 +256,7 @@ static inline void ADC(byte *dst, byte val){
     const word result = dst_val + val + carry_set;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
-            -1, 
+            RESET, 
             ((dst_val & 0x0F) + (val & 0x0F) + carry_set) > 0x0F, 
             result > 0xFF
     ); 
@@ -113,7 +267,7 @@ static inline void SUB(byte *dst, byte val){
     const word result = dst_val - val;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
-            1, 
+            SET, 
             (dst_val & 0x0F) < (val & 0x0F), 
             result > 0xFF
     ); 
@@ -125,7 +279,7 @@ static inline void SBC(byte *dst, byte val){
     const word result = dst_val - val - carry_set;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
-            1, 
+            SET, 
             (dst_val & 0x0F) < (val & 0x0F) + carry_set, 
             result > 0xFF
     ); 
@@ -133,23 +287,23 @@ static inline void SBC(byte *dst, byte val){
 
 static inline void AND(byte *dst, byte val){
     *dst &= val;
-    SET_FLAGS(*dst == 0, -1, 1, -1);
+    SET_FLAGS(*dst == 0, RESET, SET, RESET);
 }
 
 static inline void XOR(byte *dst, byte val){
     *dst ^= val;
-    SET_FLAGS(*dst == 0, -1, -1, -1);
+    SET_FLAGS(*dst == 0, RESET, RESET, RESET);
 }
 
 static inline void OR(byte *dst, byte val){
     *dst |= val;
-    SET_FLAGS(*dst == 0, -1, -1, -1);
+    SET_FLAGS(*dst == 0, RESET, RESET, RESET);
 }
 
 static inline void CP(byte *dst, byte val){
-    word result = *dst - val;
+    const word result = *dst - val;
     SET_FLAGS(result == 0, 
-            1, 
+            SET, 
             (*dst & 0x0F) < (val & 0x0F), 
             result > 0xFF
     ); 
@@ -161,69 +315,69 @@ static void execute(byte opcode){
         case 0x01: LD16(&BC, read16(PC+1)); break;
         case 0x02: write(BC, A); break;
         case 0x03: BC++; break;
-        case 0x04: break;
-        case 0x05: break;
-        case 0x06: break;
-        case 0x07: break;
-        case 0x08: break;
-        case 0x09: break;
-        case 0x0A: break;
-        case 0x0B: break;
-        case 0x0C: break;
-        case 0x0D: break;
-        case 0x0E: break;
-        case 0x0F: break;
+        case 0x04: INC(&B); break;
+        case 0x05: DEC(&B); break;
+        case 0x06: LD(&B, read(PC+1)); break;
+        case 0x07: RLCA(); break;
+        case 0x08: LDA8(); break;
+        case 0x09: ADD16(&HL, BC); break;
+        case 0x0A: LD(&A, read(BC)); break;
+        case 0x0B: BC--; break;
+        case 0x0C: INC(&C); break;
+        case 0x0D: DEC(&C); break;
+        case 0x0E: LD(&C, read(PC+1)); break;
+        case 0x0F: RRCA(); break;
 
         case 0x10: break;
         case 0x11: LD16(&DE, read16(PC+1)); break;
         case 0x12: write(DE, A); break;
         case 0x13: DE++; break;
-        case 0x14: break;
-        case 0x15: break;
-        case 0x16: break;
-        case 0x17: break;
+        case 0x14: INC(&D); break;
+        case 0x15: DEC(&D); break;
+        case 0x16: LD(&D, read(PC+1)); break;
+        case 0x17: RLA(); break;
         case 0x18: break;
-        case 0x19: break;
-        case 0x1A: break;
-        case 0x1B: break;
-        case 0x1C: break;
-        case 0x1D: break;
-        case 0x1E: break;
-        case 0x1F: break;
+        case 0x19: ADD16(&HL, DE); break;
+        case 0x1A: LD(&A, read(DE));break;
+        case 0x1B: DE--; break;
+        case 0x1C: INC(&E); break;
+        case 0x1D: DEC(&E); break;
+        case 0x1E: LD(&E, read(PC+1)); break;
+        case 0x1F: RRA(); break;
 
         case 0x20: break;
         case 0x21: LD16(&HL, read16(PC+1)); break;
         case 0x22: write(HL, A); HL++; break;
         case 0x23: HL++; break;
-        case 0x24: break;
-        case 0x25: break;
-        case 0x26: break;
-        case 0x27: break;
-        case 0x28: break;
-        case 0x29: break;
-        case 0x2A: break;
-        case 0x2B: break;
-        case 0x2C: break;
-        case 0x2D: break;
-        case 0x2E: break;
-        case 0x2F: break;
+        case 0x24: INC(&H); break;
+        case 0x25: DEC(&H); break;
+        case 0x26: LD(&H, read(PC+1)); break;
+        case 0x27: DAA(); break;
+        case 0x28: SCF(); break;
+        case 0x29: ADD16(&HL, HL); break;
+        case 0x2A: LD(&A, read(HL)); HL++; break;
+        case 0x2B: HL--; break;
+        case 0x2C: INC(&L); break;
+        case 0x2D: DEC(&L); break;
+        case 0x2E: LD(&L, read(PC+1)); break;
+        case 0x2F: CPL(); break;
 
         case 0x30: break;
         case 0x31: LD16(&SP, read16(PC+1)); break;
         case 0x32: write(HL, A); HL--; break;
         case 0x33: SP++; break;
-        case 0x34: break;
-        case 0x35: break;
-        case 0x36: break;
-        case 0x37: break;
+        case 0x34: INC_MEM(HL); break;
+        case 0x35: DEC_MEM(HL); break;
+        case 0x36: write(HL, read(PC+1)); break;
+        case 0x37: SCF(); break;
         case 0x38: break;
-        case 0x39: break;
-        case 0x3A: break;
-        case 0x3B: break;
-        case 0x3C: break;
-        case 0x3D: break;
-        case 0x3E: break;
-        case 0x3F: break;
+        case 0x39: ADD16(&HL, SP); break;
+        case 0x3A: LD(&A, read(HL)); HL--; break;
+        case 0x3B: SP--; break;
+        case 0x3C: INC(&A); break;
+        case 0x3D: DEC(&A); break;
+        case 0x3E: LD(&A, read(PC+1)); break;
+        case 0x3F: CCF(); break;
 
         case 0x40: LD(&B, B); break;
         case 0x41: LD(&B, C); break;
