@@ -5,7 +5,7 @@
 void emulate(){
     while(1){
         cycle(); 
-        print_registers();
+        //print_registers();
         char out = perform_serial();
         if(out != '\0') printf("%c", out);
     }

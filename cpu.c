@@ -8,11 +8,16 @@ static const byte pc_inc[0x100];
 static const byte extended_cycles[0x100];
 static const byte extended_pc_inc[0x100];
 
-static inline void SET_FLAGS(byte z, byte n, byte h, byte c){
-    if(z) F |= FLAG_Z; 
-    if(n) F |= FLAG_N; 
-    if(h) F |= FLAG_H; 
-    if(c) F |= FLAG_C; 
+//-1 == reset, 0 == do nothing, else == set
+static inline void SET_FLAGS(int z, int n, int h, int c){
+    if(z == -1) F &= ~(FLAG_Z);
+    else if(z > 0) F |= FLAG_Z;
+    if(n == -1) F &= ~(FLAG_N);
+    else if(n > 0) F |= FLAG_N;
+    if(h == -1) F &= ~(FLAG_H); 
+    else if(h > 0) F |= FLAG_H;
+    if(c == -1) F &= ~(FLAG_C);
+    else if(c > 0) F |= FLAG_C;
 }
 
 void cpu_init(){
@@ -62,6 +67,20 @@ static inline void LD(byte *dst, byte val){
     *dst = val;
 }
 
+static inline void LD16(word *dst, word val){
+    *dst = val;
+}
+
+static inline void INC(byte *dst, byte val){
+    const byte dst_val = *dst;
+    *dst += 1;
+    SET_FLAGS(*dst == 0, 
+            -1, 
+            ((dst_val & 0x0F) + (val & 0x0F)) > 0x0F, 
+            0 
+    ); 
+}
+
 static inline void HALT(){
     cpu.is_halted = 1;
 }
@@ -71,7 +90,7 @@ static inline void ADD(byte* dst, byte val) {
     const word result = dst_val + val;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
-            0, 
+            -1, 
             ((dst_val & 0x0F) + (val & 0x0F)) > 0x0F, 
             result > 0xFF
     ); 
@@ -83,7 +102,7 @@ static inline void ADC(byte *dst, byte val){
     const word result = dst_val + val + carry_set;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
-            0, 
+            -1, 
             ((dst_val & 0x0F) + (val & 0x0F) + carry_set) > 0x0F, 
             result > 0xFF
     ); 
@@ -114,17 +133,17 @@ static inline void SBC(byte *dst, byte val){
 
 static inline void AND(byte *dst, byte val){
     *dst &= val;
-    SET_FLAGS(*dst == 0, 0, 1, 0);
+    SET_FLAGS(*dst == 0, -1, 1, -1);
 }
 
 static inline void XOR(byte *dst, byte val){
     *dst ^= val;
-    SET_FLAGS(*dst == 0, 0, 0, 0);
+    SET_FLAGS(*dst == 0, -1, -1, -1);
 }
 
 static inline void OR(byte *dst, byte val){
     *dst |= val;
-    SET_FLAGS(*dst == 0, 0, 0, 0);
+    SET_FLAGS(*dst == 0, -1, -1, -1);
 }
 
 static inline void CP(byte *dst, byte val){
@@ -139,9 +158,9 @@ static inline void CP(byte *dst, byte val){
 static void execute(byte opcode){
     switch(opcode){
         case 0x00: break;
-        case 0x01: break;
-        case 0x02: break;
-        case 0x03: break;
+        case 0x01: LD16(&BC, read16(PC+1)); break;
+        case 0x02: write(BC, A); break;
+        case 0x03: BC++; break;
         case 0x04: break;
         case 0x05: break;
         case 0x06: break;
@@ -156,9 +175,9 @@ static void execute(byte opcode){
         case 0x0F: break;
 
         case 0x10: break;
-        case 0x11: break;
-        case 0x12: break;
-        case 0x13: break;
+        case 0x11: LD16(&DE, read16(PC+1)); break;
+        case 0x12: write(DE, A); break;
+        case 0x13: DE++; break;
         case 0x14: break;
         case 0x15: break;
         case 0x16: break;
@@ -173,9 +192,9 @@ static void execute(byte opcode){
         case 0x1F: break;
 
         case 0x20: break;
-        case 0x21: break;
-        case 0x22: break;
-        case 0x23: break;
+        case 0x21: LD16(&HL, read16(PC+1)); break;
+        case 0x22: write(HL, A); HL++; break;
+        case 0x23: HL++; break;
         case 0x24: break;
         case 0x25: break;
         case 0x26: break;
@@ -190,9 +209,9 @@ static void execute(byte opcode){
         case 0x2F: break;
 
         case 0x30: break;
-        case 0x31: break;
-        case 0x32: break;
-        case 0x33: break;
+        case 0x31: LD16(&SP, read16(PC+1)); break;
+        case 0x32: write(HL, A); HL--; break;
+        case 0x33: SP++; break;
         case 0x34: break;
         case 0x35: break;
         case 0x36: break;
