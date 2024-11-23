@@ -7,7 +7,7 @@ CPU cpu;
 #define RESET 0
 #define SET 1
 
-static const byte cycles[0x100];
+static byte cycles[0x100];
 static const byte pc_inc[0x100];
 static const byte extended_cycles[0x100];
 static const byte extended_pc_inc[0x100];
@@ -172,6 +172,30 @@ static inline void RRCA(){
     ); 
 }
 
+static inline void JRN(byte flag, byte opcode){ //jump if not set
+    const byte flag_set = F & flag;
+    if(!flag_set){
+        PC+= (int)read(PC+1); //need signed data here     
+        cycles[opcode] = 12; 
+    }else{
+        cycles[opcode] = 8;
+    }
+}
+
+static inline void JRS(byte flag, byte opcode){ //jump if set
+    const byte flag_set = F & flag;
+    if(flag_set){
+        PC+= (int)read(PC+1); //need signed data here     
+        cycles[opcode] = 12; 
+    }else{
+        cycles[opcode] = 8;
+    }
+}
+
+static inline void JR(byte opcode){
+    PC+=(int)read(PC+1);
+}
+
 //https://blog.ollien.com/posts/gb-daa/ 
 static inline void DAA(){
     byte should_carry = 0;
@@ -311,7 +335,7 @@ static inline void CP(byte *dst, byte val){
 
 static void execute(byte opcode){
     switch(opcode){
-        case 0x00: break;
+        case 0x00: break; //NOP
         case 0x01: LD16(&BC, read16(PC+1)); break;
         case 0x02: write(BC, A); break;
         case 0x03: BC++; break;
@@ -328,7 +352,7 @@ static void execute(byte opcode){
         case 0x0E: LD(&C, read(PC+1)); break;
         case 0x0F: RRCA(); break;
 
-        case 0x10: break;
+        case 0x10: break; //STOP
         case 0x11: LD16(&DE, read16(PC+1)); break;
         case 0x12: write(DE, A); break;
         case 0x13: DE++; break;
@@ -336,7 +360,7 @@ static void execute(byte opcode){
         case 0x15: DEC(&D); break;
         case 0x16: LD(&D, read(PC+1)); break;
         case 0x17: RLA(); break;
-        case 0x18: break;
+        case 0x18: JR(0x18); break;
         case 0x19: ADD16(&HL, DE); break;
         case 0x1A: LD(&A, read(DE));break;
         case 0x1B: DE--; break;
@@ -345,7 +369,7 @@ static void execute(byte opcode){
         case 0x1E: LD(&E, read(PC+1)); break;
         case 0x1F: RRA(); break;
 
-        case 0x20: break;
+        case 0x20: JRN(FLAG_Z, 0x20); break;
         case 0x21: LD16(&HL, read16(PC+1)); break;
         case 0x22: write(HL, A); HL++; break;
         case 0x23: HL++; break;
@@ -353,7 +377,7 @@ static void execute(byte opcode){
         case 0x25: DEC(&H); break;
         case 0x26: LD(&H, read(PC+1)); break;
         case 0x27: DAA(); break;
-        case 0x28: SCF(); break;
+        case 0x28: JRS(FLAG_Z, 0x28); break;
         case 0x29: ADD16(&HL, HL); break;
         case 0x2A: LD(&A, read(HL)); HL++; break;
         case 0x2B: HL--; break;
@@ -362,7 +386,7 @@ static void execute(byte opcode){
         case 0x2E: LD(&L, read(PC+1)); break;
         case 0x2F: CPL(); break;
 
-        case 0x30: break;
+        case 0x30: JRN(FLAG_C, 0x30); break;
         case 0x31: LD16(&SP, read16(PC+1)); break;
         case 0x32: write(HL, A); HL--; break;
         case 0x33: SP++; break;
@@ -370,7 +394,7 @@ static void execute(byte opcode){
         case 0x35: DEC_MEM(HL); break;
         case 0x36: write(HL, read(PC+1)); break;
         case 0x37: SCF(); break;
-        case 0x38: break;
+        case 0x38: JRS(FLAG_C, 0x38); break;
         case 0x39: ADD16(&HL, SP); break;
         case 0x3A: LD(&A, read(HL)); HL--; break;
         case 0x3B: SP--; break;
@@ -588,7 +612,7 @@ static void execute(byte opcode){
 }
 
 //sometimes cycles/pc increments can vary but this will cover most cases
-static const byte cycles[0x100] = {
+static byte cycles[0x100] = {
   /*0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F	*/
     4, 12,  8,  8,  4,  4,  8,  4, 20,  8,  8,  8,  4,  4,  8,  4,	/* 0x00 */
     4, 12,  8,  8,  4,  4,  8,  4, 12,  8,  8,  8,  4,  4,  8,  4,	/* 0x10 */
