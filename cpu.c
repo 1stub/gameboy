@@ -15,16 +15,16 @@ static const byte extended_pc_inc[0x100];
 //-1 == do nothing, 0 == reset, else == set
 static inline void SET_FLAGS(int z, int n, int h, int c){
     if (z == RESET) F &= ~(FLAG_Z);
-    else if (z == SET) F |= FLAG_Z;
+    else if (z > 0) F |= FLAG_Z;
 
     if (n == RESET) F &= ~(FLAG_N);
-    else if (n == SET) F |= FLAG_N;
+    else if (n > 0) F |= FLAG_N;
 
     if (h == RESET) F &= ~(FLAG_H); 
-    else if (h == SET) F |= FLAG_H;
+    else if (h > 0) F |= FLAG_H;
 
     if (c == RESET) F &= ~(FLAG_C);
-    else if (c == SET) F |= FLAG_C;
+    else if (c > 0) F |= FLAG_C;
 }
 
 void cpu_init(){
@@ -175,10 +175,22 @@ static inline void RRCA(){
 static inline void JRN(byte flag, byte opcode){ //jump if not set
     const byte flag_set = F & flag;
     if(!flag_set){
-        PC+= (int)read(PC+1); //need signed data here     
+        PC += (int)read(PC+1); //need signed data here     
         cycles[opcode] = 12; 
     }else{
         cycles[opcode] = 8;
+    }
+}
+
+static inline void JPN(byte flag, byte opcode){ //jump if not set
+    const byte flag_set = F & flag;
+    if(!flag_set){
+        byte low = read(PC + 1);
+        byte high = read(PC + 2);
+        PC = low | (high << 8);
+        cycles[opcode] = 16; 
+    }else{
+        cycles[opcode] = 12;
     }
 }
 
@@ -192,7 +204,25 @@ static inline void JRS(byte flag, byte opcode){ //jump if set
     }
 }
 
-static inline void JR(byte opcode){
+static inline void JPS(byte flag, byte opcode){ //jump if set
+    const byte flag_set = F & flag;
+    if(flag_set){
+        byte low = read(PC + 1);
+        byte high = read(PC + 2);
+        PC = low | (high << 8);
+        cycles[opcode] = 16; 
+    }else{
+        cycles[opcode] = 12;
+    }
+}
+
+static inline void JP(){ 
+    byte low = read(PC + 1);
+    byte high = read(PC + 2);
+    PC = low | (high << 8);
+}
+
+static inline void JR(){
     PC+=(int)read(PC+1);
 }
 
@@ -246,6 +276,78 @@ static inline void CCF(){
             RESET, 
             !carry_set  
     );  
+}
+
+static inline word RET(){
+    const byte low = read(SP); SP++;
+    const byte high = read(SP); SP++;
+    const word address = low | (high << 8);
+    PC = address;
+    return address;
+}
+
+static inline void RETN(byte flag){
+    if(!(F & flag)){
+        RET();
+    }
+}
+
+static inline void RETS(byte flag, byte opcode){
+    if(F & flag){
+        RET();
+        cycles[opcode] = 20;
+    }else{
+        cycles[opcode] = 8;
+    }
+}
+
+static inline void CALLN(byte flag, byte opcode){
+    if(!(F & flag)){
+        word address = read(PC + 1) | (read(PC + 2) << 8);
+        SP--; write(SP, (PC+3) >> 8);
+        SP--; write(SP, (PC+3) & 0x00FF);
+        PC = address;
+        cycles[opcode] = 24;
+    }else{
+        cycles[opcode] = 12;
+    }
+}
+
+static inline void CALLS(byte flag, byte opcode){
+    if(F & flag){
+        word address = read(PC + 1) | (read(PC + 2) << 8);
+        SP--; write(SP, (PC+3) >> 8);
+        SP--; write(SP, (PC+3) & 0x00FF);
+        PC = address;
+        cycles[opcode] = 24;
+    }else{
+        cycles[opcode] = 12;
+    }
+}
+
+static inline void CALL(){
+    word address = read(PC + 1) | (read(PC + 2) << 8);
+    SP--; write(SP, (PC+3) >> 8);
+    SP--; write(SP, (PC+3) & 0x00FF);
+    PC = address;
+}
+
+static inline void POP(word *dst){
+    *dst = RET();
+    F &= ~0x0F;
+}
+
+static inline void PUSH(word *dst){
+    SP--; write(SP, (*dst >> 8));
+    SP--; write(SP, *dst & 0x00FF);
+}
+
+static inline void RST(byte val){
+    PC++; SP--;
+    write(SP, PC >> 8); SP--;
+    write(SP, PC & 0x00FF); 
+    word address = val | (0x00 << 8); 
+    PC = address;
 }
 
 static inline void HALT(){
@@ -360,7 +462,7 @@ static void execute(byte opcode){
         case 0x15: DEC(&D); break;
         case 0x16: LD(&D, read(PC+1)); break;
         case 0x17: RLA(); break;
-        case 0x18: JR(0x18); break;
+        case 0x18: JR(); break;
         case 0x19: ADD16(&HL, DE); break;
         case 0x1A: LD(&A, read(DE));break;
         case 0x1B: DE--; break;
@@ -539,73 +641,73 @@ static void execute(byte opcode){
         case 0xBE: CP(&A, read(HL)); break;
         case 0xBF: CP(&A, A); break;
 
-        case 0xC0: break;
-        case 0xC1: break;
-        case 0xC2: break;
-        case 0xC3: break;
-        case 0xC4: break;
-        case 0xC5: break;
-        case 0xC6: break;
-        case 0xC7: break;
-        case 0xC8: break;
-        case 0xC9: break;
-        case 0xCA: break;
-        case 0xCB: break;
-        case 0xCC: break;
-        case 0xCD: break;
-        case 0xCE: break;
-        case 0xCF: break;
+        case 0xC0: RETN(FLAG_Z); break;
+        case 0xC1: POP(&BC); break;
+        case 0xC2: JPN(FLAG_Z, 0xC2); break;
+        case 0xC3: JP(); break;
+        case 0xC4: CALLN(FLAG_C, 0xC4); break;
+        case 0xC5: PUSH(&BC); break;
+        case 0xC6: ADD(&A, read(PC + 1)); break;
+        case 0xC7: RST(0x00); break;
+        case 0xC8: RETS(FLAG_Z, 0xC8); break;
+        case 0xC9: RET(); break;
+        case 0xCA: JPS(FLAG_Z, 0xCA); break;
+        case 0xCB: break; //extended instrs
+        case 0xCC: CALLS(FLAG_Z, 0xCC); break;
+        case 0xCD: CALL(); break;
+        case 0xCE: ADC(&A, read(PC + 1)); break;
+        case 0xCF: RST(0x08); break;
 
-        case 0xD0: break;
-        case 0xD1: break;
-        case 0xD2: break;
+        case 0xD0: RETN(FLAG_C); break;
+        case 0xD1: POP(&DE); break;
+        case 0xD2: JPN(FLAG_C, 0xD2); break;
         case 0xD3: break;
-        case 0xD4: break;
-        case 0xD5: break;
-        case 0xD6: break;
-        case 0xD7: break;
-        case 0xD8: break;
+        case 0xD4: CALLN(FLAG_C, 0xD4); break;
+        case 0xD5: PUSH(&DE); break;
+        case 0xD6: SUB(&A, read(PC + 1)); break;
+        case 0xD7: RST(0x10); break;
+        case 0xD8: RETS(FLAG_C, 0xD8); break;
         case 0xD9: break;
-        case 0xDA: break;
+        case 0xDA: JPS(FLAG_C, 0xDA); break;
         case 0xDB: break;
-        case 0xDC: break;
+        case 0xDC: CALLS(FLAG_C, 0xDB); break;
         case 0xDD: break;
-        case 0xDE: break;
-        case 0xDF: break;
+        case 0xDE: SBC(&A, read(PC + 1)); break;
+        case 0xDF: RST(0x18); break;
 
-        case 0xE0: break;
-        case 0xE1: break;
-        case 0xE2: break;
+        case 0xE0: write(0xFF00 + read(PC + 1), A); break;
+        case 0xE1: POP(&HL); break;
+        case 0xE2: write(0xFF00 + C, A); break;
         case 0xE3: break;
         case 0xE4: break;
-        case 0xE5: break;
-        case 0xE6: break;
-        case 0xE7: break;
+        case 0xE5: PUSH(&HL); break;
+        case 0xE6: AND(&A, read(PC + 1)); break;
+        case 0xE7: RST(0x20); break;
         case 0xE8: break;
-        case 0xE9: break;
-        case 0xEA: break;
+        case 0xE9: PC = HL; break;
+        case 0xEA: write(read(PC + 1) | (read(PC + 2) << 8), A); break;
         case 0xEB: break;
         case 0xEC: break;
         case 0xED: break;
-        case 0xEE: break;
-        case 0xEF: break;
+        case 0xEE: XOR(&A, read(PC + 1)); break;
+        case 0xEF: RST(0x28); break;
 
-        case 0xF0: break;
-        case 0xF1: break;
-        case 0xF2: break;
+        case 0xF0: LD(&A, 0xFF00 + read(PC + 1)); break;
+        case 0xF1: POP(&AF); break;
+        case 0xF2: LD(&A, read(0xFF00 + C));break;
         case 0xF3: break;
         case 0xF4: break;
-        case 0xF5: break;
-        case 0xF6: break;
-        case 0xF7: break;
+        case 0xF5: PUSH(&AF); break;
+        case 0xF6: OR(&A, read(PC + 1)); break;
+        case 0xF7: RST(0x30); break;
         case 0xF8: break;
-        case 0xF9: break;
-        case 0xFA: break;
+        case 0xF9: SP = HL; break;
+        case 0xFA: write(A, read(PC + 1) | (read(PC + 2) << 8)); break;
         case 0xFB: break;
         case 0xFC: break;
         case 0xFD: break;
-        case 0xFE: break;
-        case 0xFF: break;
+        case 0xFE: CP(&A, read(PC + 1)); break;
+        case 0xFF: RST(0x38); break;
 
         default: break;
     }
