@@ -8,7 +8,7 @@ CPU cpu;
 #define SET 1
 
 static byte cycles[0x100];
-static const byte pc_inc[0x100];
+static byte pc_inc[0x100];
 static const byte extended_cycles[0x100];
 static const byte extended_pc_inc[0x100];
 
@@ -44,23 +44,10 @@ void cpu_init(){
 
 //our cpu will cycle in increments of 4 T cycles (1 Machine Cycle) 
 byte cycle(){
-    static byte step = 0;
-    step += 4;
-    if(step < cpu.cycles){
-        return 4;
-    }
     const byte cur_instr = read(PC);
     execute(cur_instr);
     
-    if(cur_instr == 0xCB){
-        PC += extended_pc_inc[cur_instr];
-        cpu.cycles = extended_cycles[cur_instr];   
-    }else{
-        PC += pc_inc[cur_instr];
-        cpu.cycles = cycles[cur_instr];
-    }
-
-    return 4;
+    return cpu.cycles;
 }
 
 void print_registers(){
@@ -110,7 +97,7 @@ static inline void LDHL(){
     SET_FLAGS(RESET, 
             RESET, 
             ((SP & 0x0F) + (val & 0x0F)) > 0x0F, 
-            (SP & 0xFF + val & 0xFF) > 0xFF 
+            ((SP & 0xFF) + (val & 0xFF)) > 0xFF 
     ); 
 }
 
@@ -119,7 +106,7 @@ static inline void ADDSP(){
     SET_FLAGS(RESET, 
             RESET, 
             ((SP & 0x0F) + (val & 0x0F)) > 0x0F, 
-            (SP & 0xFF + val & 0xFF) > 0xFF 
+            ((SP & 0xFF) + (val & 0xFF)) > 0xFF 
     );
     SP += val;
 }
@@ -139,7 +126,7 @@ static inline void DEC(byte *dst){
     *dst -= 1;
     SET_FLAGS(*dst == 0, 
             SET, 
-            !(dst_val & 0xFF), 
+            !(dst_val & 0x0F), 
             DO_NOTHING 
     ); 
 }
@@ -203,7 +190,7 @@ static inline void RRCA(){
 static inline void JRN(byte flag, byte opcode){ //jump if not set
     const byte flag_set = F & flag;
     if(!flag_set){
-        PC += (int)read(PC+1); //need signed data here     
+        PC += (int8_t)read(PC+1); //need signed data here     
         cycles[opcode] = 12; 
     }else{
         cycles[opcode] = 8;
@@ -306,37 +293,16 @@ static inline void CCF(){
     );  
 }
 
-static inline word RET(){
-    const byte low = read(SP); SP++;
-    const byte high = read(SP); SP++;
-    const word address = low | (high << 8);
-    PC = address;
-    return address;
-}
-
-static inline void RETN(byte flag){
-    if(!(F & flag)){
-        RET();
-    }
-}
-
-static inline void RETS(byte flag, byte opcode){
-    if(F & flag){
-        RET();
-        cycles[opcode] = 20;
-    }else{
-        cycles[opcode] = 8;
-    }
-}
-
 static inline void CALLN(byte flag, byte opcode){
     if(!(F & flag)){
         word address = read(PC + 1) | (read(PC + 2) << 8);
         SP--; write(SP, (PC+3) >> 8);
         SP--; write(SP, (PC+3) & 0x00FF);
         PC = address;
+        pc_inc[opcode] = 0;
         cycles[opcode] = 24;
     }else{
+        pc_inc[opcode] = 3;
         cycles[opcode] = 12;
     }
 }
@@ -360,8 +326,32 @@ static inline void CALL(){
     PC = address;
 }
 
+static inline void RET(){
+    const byte low = read(SP); SP++;
+    const byte high = read(SP); SP++;
+    const word address = low | (high << 8);
+    PC = address;
+}
+
+static inline void RETN(byte flag){
+    if(!(F & flag)){
+        RET();
+    }
+}
+
+static inline void RETS(byte flag, byte opcode){
+    if(F & flag){
+        RET();
+        cycles[opcode] = 20;
+    }else{
+        cycles[opcode] = 8;
+    }
+}
+
 static inline void POP(word *dst){
-    *dst = RET();
+    const byte low = read(SP); SP++;
+    const byte high = read(SP); SP++;
+    *dst = low | (high << 8);
     F &= ~0x0F;
 }
 
@@ -517,7 +507,7 @@ static inline void RLMEM(){
 }
 
 static inline void RR(byte *reg){
-    const int will_carry = *reg & (1<<7);
+    const int will_carry = *reg & (0x01);
     const int is_carry = F & FLAG_C;
     *reg >>= 1;
     if(is_carry) *reg |= (1<<7);
@@ -584,7 +574,8 @@ static inline void SWAPMEM(){
 }
 
 static inline void SRL(byte *reg){
-    const int will_carry = *reg & 0x01;
+    const int will_carry = *reg & (0x01);
+    *reg >>= 1;
     SET_FLAGS(*reg == 0, 
             RESET, 
             RESET, 
@@ -842,14 +833,14 @@ static void execute(byte opcode){
         case 0xC1: POP(&BC); break;
         case 0xC2: JPN(FLAG_Z, 0xC2); break;
         case 0xC3: JP(); break;
-        case 0xC4: CALLN(FLAG_C, 0xC4); break;
+        case 0xC4: CALLN(FLAG_Z, 0xC4); break;
         case 0xC5: PUSH(&BC); break;
         case 0xC6: ADD(&A, read(PC + 1)); break;
         case 0xC7: RST(0x00); break;
         case 0xC8: RETS(FLAG_Z, 0xC8); break;
         case 0xC9: RET(); break;
         case 0xCA: JPS(FLAG_Z, 0xCA); break;
-        case 0xCB: extended_execute(PC + 1); break; //extended instrs
+        case 0xCB: extended_execute(read(PC+1)); break; //extended instrs
         case 0xCC: CALLS(FLAG_Z, 0xCC); break;
         case 0xCD: CALL(); break;
         case 0xCE: ADC(&A, read(PC + 1)); break;
@@ -889,7 +880,7 @@ static void execute(byte opcode){
         case 0xEE: XOR(&A, read(PC + 1)); break;
         case 0xEF: RST(0x28); break;
 
-        case 0xF0: LD(&A, 0xFF00 + read(PC + 1)); break;
+        case 0xF0: LD(&A, read(0xFF00 + read(PC + 1))); break;
         case 0xF1: POP(&AF); break;
         case 0xF2: LD(&A, read(0xFF00 + C));break;
         case 0xF3: IME = 0; break;
@@ -899,7 +890,7 @@ static void execute(byte opcode){
         case 0xF7: RST(0x30); break;
         case 0xF8: LDHL(); break;
         case 0xF9: SP = HL; break;
-        case 0xFA: write(A, read(PC + 1) | (read(PC + 2) << 8)); break;
+        case 0xFA: LD(&A, read(read(PC+1) | (read(PC+2)<<8))); break;
         case 0xFB: IME = 1; break;
         case 0xFC: break;
         case 0xFD: break;
@@ -907,6 +898,14 @@ static void execute(byte opcode){
         case 0xFF: RST(0x38); break;
 
         default: break;
+    }
+    if( opcode == 0xCB){
+
+        PC += extended_pc_inc[opcode];
+        cpu.cycles = extended_cycles[opcode];   
+    }else{
+        PC += pc_inc[opcode];
+        cpu.cycles = cycles[opcode];
     }
 }
 
@@ -1218,12 +1217,14 @@ static byte cycles[0x100] = {
    12, 12,  8,  4,  0, 16,  8, 16, 12,  8, 16,  4,  0,  0,  8, 16	/* 0xF0 */
 };
 
-static const byte pc_inc[0x100] = {
+//some are 0 because pc get incd during the instruction
+//the -1's never get called, they are undefined
+static byte pc_inc[0x100] = {
   /*0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F	*/
     1,  3,  1,  1,  1,  1,  2,  1,  3,  1,  1,  1,  1,  1,  2,  1,	/* 0x00 */
-    1,  2,  3,  1,  1,  1,  2,  1,  2,  1,  1,  1,  1,  1,  2,  1,	/* 0x10 */
-    2,  3,  1,  1,  1,  1,  2,  1,  3,  1,  1,  1,  1,  1,  2,  1,	/* 0x20 */
-    1,  2,  3,  1,  1,  1,  2,  1,  3,  1,  1,  1,  1,  1,  2,  1,	/* 0x30 */
+    1,  3,  1,  1,  1,  1,  2,  1,  2,  1,  1,  1,  1,  1,  2,  1,	/* 0x10 */
+    2,  3,  1,  1,  1,  1,  2,  1,  2,  1,  1,  1,  1,  1,  2,  1,	/* 0x20 */
+    2,  3,  1,  1,  1,  1,  2,  1,  2,  1,  1,  1,  1,  1,  2,  1,	/* 0x30 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0x40 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0x50 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0x60 */
@@ -1232,10 +1233,10 @@ static const byte pc_inc[0x100] = {
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0x90 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0xA0 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0xB0 */
-    1,  3,  3,  3,  3,  3,  1,  3,  1,  3,  3,  1,  3,  3,  1,  3,	/* 0xC0 */
-    1,  2,  2,  1,  2,  3,  1,  3,  1,  3,  3,  1,  2,  1,  1,  3,	/* 0xD0 */
-    2,  3,  2,  1,  1,  3,  1,  3,  3,  1,  3,  1,  1,  1,  1,  3,	/* 0xE0 */
-    2,  3,  2,  1,  1,  3,  1,  3,  3,  1,  3,  1,  1,  1,  1,  3	/* 0xF0 */
+    1,  1,  3,  0,  0,  1,  2,  3,  1,  0,  3,  1,  0,  0,  2,  1,	/* 0xC0 */
+    1,  1,  3, -1,  0,  1,  2,  1,  1,  1,  3, -1,  0, -1,  2,  1,	/* 0xD0 */
+    2,  1,  1, -1, -1,  1,  2,  3,  2,  1,  3, -1, -1, -1,  2,  1,	/* 0xE0 */
+    2,  1,  1,  1, -1,  1,  2,  1,  2,  1,  3,  1, -1, -1,  2,  1	/* 0xF0 */
 };
 
 static const byte extended_cycles[0x100] = {

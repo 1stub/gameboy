@@ -4,8 +4,8 @@
 
 void emulate(){
     while(1){
+        print_registers();
         cycle(); 
-        //print_registers();
         char out = perform_serial();
         if(out != '\0') printf("%c", out);
     }

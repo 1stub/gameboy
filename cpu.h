@@ -1,7 +1,7 @@
 #ifndef CPU_H
 #define CPU_H
 
-#include <stdbool.h>
+#include <stdint.h>
 #include "util.h"
 #include "regs.h"
 #include "mmu.h"

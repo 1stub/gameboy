@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 typedef struct{
-    byte memory[0xFFFF];
+    byte memory[0x10000];
 }MMU;
 
 extern void mmu_init();
