@@ -463,6 +463,175 @@ static inline void CP(byte *dst, byte val){
     ); 
 }
 
+//the following instructions are only used in the extended instruction set.
+static inline void RLC(byte *reg){
+    const int will_carry = *reg & (1<<7);
+    *reg <<= 1;
+    if(will_carry) *reg += 1;
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            RESET
+    ); 
+}
+
+static inline void RLCMEM(){
+    byte val = read(HL);
+    RLC(&val);
+    write(HL, val);
+}
+
+static inline void RRC(byte *reg){
+    const int will_carry = *reg & 0x01;
+    *reg >>= 1;
+    if(will_carry) *reg |= (1<<7);
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            will_carry
+    ); 
+}
+
+static inline void RRCMEM(){
+    byte val = read(HL);
+    RRC(&val);
+    write(HL, val);
+}
+
+static inline void RL(byte *reg){
+    const int will_carry = *reg & (1<<7);
+    const int is_carry = F & FLAG_C;
+    *reg <<= 1;
+    if(is_carry) *reg += 1;
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            will_carry
+    ); 
+}
+
+static inline void RLMEM(){
+    byte val = read(HL);
+    RL(&val);
+    write(HL, val);
+}
+
+static inline void RR(byte *reg){
+    const int will_carry = *reg & (1<<7);
+    const int is_carry = F & FLAG_C;
+    *reg >>= 1;
+    if(is_carry) *reg |= (1<<7);
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            will_carry
+    ); 
+}
+
+static inline void RRMEM(){
+    byte val = read(HL);
+    RR(&val);
+    write(HL, val);
+}
+
+static inline void SLA(byte *reg){
+    const int will_carry = *reg & (1<<7);
+    *reg <<= 1;
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            will_carry
+    ); 
+}
+
+static inline void SLAMEM(){
+    byte val = read(HL);
+    SLA(&val);
+    write(HL, val);
+}
+
+static inline void SRA(byte *reg){
+    const int will_carry = *reg & 0x01;
+    const int high_order = *reg & (1<<7);
+    *reg >>= 1;
+    if(high_order) *reg |= (1<<7);
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            will_carry
+    ); 
+}
+
+static inline void SRAMEM(){
+    byte val = read(HL);
+    SRA(&val);
+    write(HL, val);
+}
+
+static inline void SWAP(byte *reg){
+    *reg = *reg << 4 | *reg >> 4;
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            RESET
+    );  
+}
+
+static inline void SWAPMEM(){
+    byte val = read(HL);
+    SWAP(&val);
+    write(HL, val);
+}
+
+static inline void SRL(byte *reg){
+    const int will_carry = *reg & 0x01;
+    SET_FLAGS(*reg == 0, 
+            RESET, 
+            RESET, 
+            will_carry 
+    ); 
+}
+
+static inline void SRLMEM(){
+    byte val = read(HL);
+    SRL(&val);
+    write(HL, val);
+}
+
+static inline void BIT(byte *reg, byte bit){
+    const int is_set = *reg & (1<<bit);
+    SET_FLAGS(!is_set, 
+            RESET, 
+            SET, 
+            DO_NOTHING 
+    ); 
+}
+
+static inline void BITMEM(byte bit){
+    byte val = read(HL);
+    BIT(&val, bit);
+}
+
+static inline void _SET(byte *reg, byte bit){
+    *reg |= (1<<bit);
+}
+
+static inline void _SETMEM(byte bit){
+    byte val = read(HL);
+    _SET(&val, bit);
+    write(HL, val);
+}
+
+static inline void RES(byte *reg, byte bit){
+    *reg &= ~(1<<bit);
+}
+
+static inline void RESMEM(byte bit){
+    byte val = read(HL);
+    RES(&val, bit);
+    write(HL, val);
+}
+
 static void execute(byte opcode){
     switch(opcode){
         case 0x00: break; //NOP
@@ -744,277 +913,285 @@ static void execute(byte opcode){
 
 static void extended_execute(byte opcode) {
     switch (opcode) {
-        case 0x00: break;
-        case 0x01: break;
-        case 0x02: break;
-        case 0x03: break;
-        case 0x04: break;
-        case 0x05: break;
-        case 0x06: break;
-        case 0x07: break;
-        case 0x08: break;
-        case 0x09: break;
-        case 0x0A: break;
-        case 0x0B: break;
-        case 0x0C: break;
-        case 0x0D: break;
-        case 0x0E: break;
-        case 0x0F: break;
+        case 0x00: RLC(&B); break;
+        case 0x01: RLC(&C); break;
+        case 0x02: RLC(&D); break;
+        case 0x03: RLC(&E); break;
+        case 0x04: RLC(&H); break;
+        case 0x05: RLC(&L); break;
+        case 0x06: RLCMEM(); break;
+        case 0x07: RLC(&A); break;
+        case 0x08: RRC(&B);break;
+        case 0x09: RRC(&B);break;
+        case 0x0A: RRC(&D);break;
+        case 0x0B: RRC(&E);break;
+        case 0x0C: RRC(&H);break;
+        case 0x0D: RRC(&L);break;
+        case 0x0E: RRCMEM();break;
+        case 0x0F: RRC(&A);break;
 
-        case 0x10: break;
-        case 0x11: break;
-        case 0x12: break;
-        case 0x13: break;
-        case 0x14: break;
-        case 0x15: break;
-        case 0x16: break;
-        case 0x17: break;
-        case 0x18: break;
-        case 0x19: break;
-        case 0x1A: break;
-        case 0x1B: break;
-        case 0x1C: break;
-        case 0x1D: break;
-        case 0x1E: break;
-        case 0x1F: break;
+        case 0x10: RL(&B); break;
+        case 0x11: RL(&C); break;
+        case 0x12: RL(&D); break;
+        case 0x13: RL(&E); break;
+        case 0x14: RL(&H); break;
+        case 0x15: RL(&L); break;
+        case 0x16: RLMEM(); break;
+        case 0x17: RL(&A); break;
+        case 0x18: RR(&B); break;
+        case 0x19: RR(&C); break;
+        case 0x1A: RR(&D); break;
+        case 0x1B: RR(&E); break;
+        case 0x1C: RR(&H); break;
+        case 0x1D: RR(&L); break;
+        case 0x1E: RRMEM(); break;
+        case 0x1F: RR(&A); break;
 
-        case 0x20: break;
-        case 0x21: break;
-        case 0x22: break;
-        case 0x23: break;
-        case 0x24: break;
-        case 0x25: break;
-        case 0x26: break;
-        case 0x27: break;
-        case 0x28: break;
-        case 0x29: break;
-        case 0x2A: break;
-        case 0x2B: break;
-        case 0x2C: break;
-        case 0x2D: break;
-        case 0x2E: break;
-        case 0x2F: break;
+        case 0x20: SLA(&B); break;
+        case 0x21: SLA(&C); break;
+        case 0x22: SLA(&D); break;
+        case 0x23: SLA(&E); break;
+        case 0x24: SLA(&H); break;
+        case 0x25: SLA(&L); break;
+        case 0x26: SLAMEM(); break;
+        case 0x27: SLA(&A); break;
+        case 0x28: SRA(&B); break;
+        case 0x29: SRA(&C); break;
+        case 0x2A: SRA(&D); break;
+        case 0x2B: SRA(&E); break;
+        case 0x2C: SRA(&H); break;
+        case 0x2D: SRA(&L); break;
+        case 0x2E: SRAMEM(); break;
+        case 0x2F: SRA(&A); break;
 
-        case 0x30: break;
-        case 0x31: break;
-        case 0x32: break;
-        case 0x33: break;
-        case 0x34: break;
-        case 0x35: break;
-        case 0x36: break;
-        case 0x37: break;
-        case 0x38: break;
-        case 0x39: break;
-        case 0x3A: break;
-        case 0x3B: break;
-        case 0x3C: break;
-        case 0x3D: break;
-        case 0x3E: break;
-        case 0x3F: break;
+        case 0x30: SWAP(&B); break;
+        case 0x31: SWAP(&C); break;
+        case 0x32: SWAP(&D); break;
+        case 0x33: SWAP(&E); break;
+        case 0x34: SWAP(&H); break;
+        case 0x35: SWAP(&L); break;
+        case 0x36: SWAPMEM(); break;
+        case 0x37: SWAP(&A); break;
+        case 0x38: SRL(&B); break;
+        case 0x39: SRL(&C); break;
+        case 0x3A: SRL(&D); break;
+        case 0x3B: SRL(&E); break;
+        case 0x3C: SRL(&H); break;
+        case 0x3D: SRL(&L); break;
+        case 0x3E: SRLMEM(); break;
+        case 0x3F: SRL(&A); break;
 
-        case 0x40: break;
-        case 0x41: break;
-        case 0x42: break;
-        case 0x43: break;
-        case 0x44: break;
-        case 0x45: break;
-        case 0x46: break;
-        case 0x47: break;
-        case 0x48: break;
-        case 0x49: break;
-        case 0x4A: break;
-        case 0x4B: break;
-        case 0x4C: break;
-        case 0x4D: break;
-        case 0x4E: break;
-        case 0x4F: break;
+        case 0x40: BIT(&B, 0); break;
+        case 0x41: BIT(&C, 0); break;
+        case 0x42: BIT(&D, 0); break;
+        case 0x43: BIT(&E, 0); break;
+        case 0x44: BIT(&H, 0); break;
+        case 0x45: BIT(&L, 0); break;
+        case 0x46: BITMEM(0); break;
+        case 0x47: BIT(&A, 0); break;
 
-        case 0x50: break;
-        case 0x51: break;
-        case 0x52: break;
-        case 0x53: break;
-        case 0x54: break;
-        case 0x55: break;
-        case 0x56: break;
-        case 0x57: break;
-        case 0x58: break;
-        case 0x59: break;
-        case 0x5A: break;
-        case 0x5B: break;
-        case 0x5C: break;
-        case 0x5D: break;
-        case 0x5E: break;
-        case 0x5F: break;
+        case 0x48: BIT(&B, 1); break;
+        case 0x49: BIT(&C, 1); break;
+        case 0x4A: BIT(&D, 1); break;
+        case 0x4B: BIT(&E, 1); break;
+        case 0x4C: BIT(&H, 1); break;
+        case 0x4D: BIT(&L, 1); break;
+        case 0x4E: BITMEM(1); break;
+        case 0x4F: BIT(&A, 1); break;
 
-        case 0x60: break;
-        case 0x61: break;
-        case 0x62: break;
-        case 0x63: break;
-        case 0x64: break;
-        case 0x65: break;
-        case 0x66: break;
-        case 0x67: break;
-        case 0x68: break;
-        case 0x69: break;
-        case 0x6A: break;
-        case 0x6B: break;
-        case 0x6C: break;
-        case 0x6D: break;
-        case 0x6E: break;
-        case 0x6F: break;
+        case 0x50: BIT(&B, 2); break;
+        case 0x51: BIT(&C, 2); break;
+        case 0x52: BIT(&D, 2); break;
+        case 0x53: BIT(&E, 2); break;
+        case 0x54: BIT(&H, 2); break;
+        case 0x55: BIT(&L, 2); break;
+        case 0x56: BITMEM(2); break;
+        case 0x57: BIT(&A, 2); break;
 
-        case 0x70: break;
-        case 0x71: break;
-        case 0x72: break;
-        case 0x73: break;
-        case 0x74: break;
-        case 0x75: break;
-        case 0x76: break;
-        case 0x77: break;
-        case 0x78: break;
-        case 0x79: break;
-        case 0x7A: break;
-        case 0x7B: break;
-        case 0x7C: break;
-        case 0x7D: break;
-        case 0x7E: break;
-        case 0x7F: break;
+        case 0x58: BIT(&B, 3); break;
+        case 0x59: BIT(&C, 3); break;
+        case 0x5A: BIT(&D, 3); break;
+        case 0x5B: BIT(&E, 3); break;
+        case 0x5C: BIT(&H, 3); break;
+        case 0x5D: BIT(&L, 3); break;
+        case 0x5E: BITMEM(3); break;
+        case 0x5F: BIT(&A, 3); break;
 
-        case 0x80: break;
-        case 0x81: break;
-        case 0x82: break;
-        case 0x83: break;
-        case 0x84: break;
-        case 0x85: break;
-        case 0x86: break;
-        case 0x87: break;
-        case 0x88: break;
-        case 0x89: break;
-        case 0x8A: break;
-        case 0x8B: break;
-        case 0x8C: break;
-        case 0x8D: break;
-        case 0x8E: break;
-        case 0x8F: break;
+        case 0x60: BIT(&B, 4); break;
+        case 0x61: BIT(&C, 4); break;
+        case 0x62: BIT(&D, 4); break;
+        case 0x63: BIT(&E, 4); break;
+        case 0x64: BIT(&H, 4); break;
+        case 0x65: BIT(&L, 4); break;
+        case 0x66: BITMEM(4); break;
+        case 0x67: BIT(&A, 4); break;
 
-        case 0x90: break;
-        case 0x91: break;
-        case 0x92: break;
-        case 0x93: break;
-        case 0x94: break;
-        case 0x95: break;
-        case 0x96: break;
-        case 0x97: break;
-        case 0x98: break;
-        case 0x99: break;
-        case 0x9A: break;
-        case 0x9B: break;
-        case 0x9C: break;
-        case 0x9D: break;
-        case 0x9E: break;
-        case 0x9F: break;
+        case 0x68: BIT(&B, 5); break;
+        case 0x69: BIT(&C, 5); break;
+        case 0x6A: BIT(&D, 5); break;
+        case 0x6B: BIT(&E, 5); break;
+        case 0x6C: BIT(&H, 5); break;
+        case 0x6D: BIT(&L, 5); break;
+        case 0x6E: BITMEM(5); break;
+        case 0x6F: BIT(&A, 5); break;
 
-        case 0xA0: break;
-        case 0xA1: break;
-        case 0xA2: break;
-        case 0xA3: break;
-        case 0xA4: break;
-        case 0xA5: break;
-        case 0xA6: break;
-        case 0xA7: break;
-        case 0xA8: break;
-        case 0xA9: break;
-        case 0xAA: break;
-        case 0xAB: break;
-        case 0xAC: break;
-        case 0xAD: break;
-        case 0xAE: break;
-        case 0xAF: break;
+        case 0x70: BIT(&B, 6); break;
+        case 0x71: BIT(&C, 6); break;
+        case 0x72: BIT(&D, 6); break;
+        case 0x73: BIT(&E, 6); break;
+        case 0x74: BIT(&H, 6); break;
+        case 0x75: BIT(&L, 6); break;
+        case 0x76: BITMEM(6); break;
+        case 0x77: BIT(&A, 6); break;
 
-        case 0xB0: break;
-        case 0xB1: break;
-        case 0xB2: break;
-        case 0xB3: break;
-        case 0xB4: break;
-        case 0xB5: break;
-        case 0xB6: break;
-        case 0xB7: break;
-        case 0xB8: break;
-        case 0xB9: break;
-        case 0xBA: break;
-        case 0xBB: break;
-        case 0xBC: break;
-        case 0xBD: break;
-        case 0xBE: break;
-        case 0xBF: break;
+        case 0x78: BIT(&B, 7); break;
+        case 0x79: BIT(&C, 7); break;
+        case 0x7A: BIT(&D, 7); break;
+        case 0x7B: BIT(&E, 7); break;
+        case 0x7C: BIT(&H, 7); break;
+        case 0x7D: BIT(&L, 7); break;
+        case 0x7E: BITMEM(7); break;
+        case 0x7F: BIT(&A, 7); break;
 
-        case 0xC0: break;
-        case 0xC1: break;
-        case 0xC2: break;
-        case 0xC3: break;
-        case 0xC4: break;
-        case 0xC5: break;
-        case 0xC6: break;
-        case 0xC7: break;
-        case 0xC8: break;
-        case 0xC9: break;
-        case 0xCA: break;
-        case 0xCB: break;
-        case 0xCC: break;
-        case 0xCD: break;
-        case 0xCE: break;
-        case 0xCF: break;
+        case 0x80: RES(&B, 0); break;
+        case 0x81: RES(&C, 0); break;
+        case 0x82: RES(&D, 0); break;
+        case 0x83: RES(&E, 0); break;
+        case 0x84: RES(&H, 0); break;
+        case 0x85: RES(&L, 0); break;
+        case 0x86: RESMEM(0); break;
+        case 0x87: RES(&A, 0); break;
 
-        case 0xD0: break;
-        case 0xD1: break;
-        case 0xD2: break;
-        case 0xD3: break;
-        case 0xD4: break;
-        case 0xD5: break;
-        case 0xD6: break;
-        case 0xD7: break;
-        case 0xD8: break;
-        case 0xD9: break;
-        case 0xDA: break;
-        case 0xDB: break;
-        case 0xDC: break;
-        case 0xDD: break;
-        case 0xDE: break;
-        case 0xDF: break;
+        case 0x88: RES(&B, 1); break;
+        case 0x89: RES(&C, 1); break;
+        case 0x8A: RES(&D, 1); break;
+        case 0x8B: RES(&E, 1); break;
+        case 0x8C: RES(&H, 1); break;
+        case 0x8D: RES(&L, 1); break;
+        case 0x8E: RESMEM(1); break;
+        case 0x8F: RES(&A, 1); break;
 
-        case 0xE0: break;
-        case 0xE1: break;
-        case 0xE2: break;
-        case 0xE3: break;
-        case 0xE4: break;
-        case 0xE5: break;
-        case 0xE6: break;
-        case 0xE7: break;
-        case 0xE8: break;
-        case 0xE9: break;
-        case 0xEA: break;
-        case 0xEB: break;
-        case 0xEC: break;
-        case 0xED: break;
-        case 0xEE: break;
-        case 0xEF: break;
+        case 0x90: RES(&B, 2); break;
+        case 0x91: RES(&C, 2); break;
+        case 0x92: RES(&D, 2); break;
+        case 0x93: RES(&E, 2); break;
+        case 0x94: RES(&H, 2); break;
+        case 0x95: RES(&L, 2); break;
+        case 0x96: RESMEM(2); break;
+        case 0x97: RES(&A, 2); break;
 
-        case 0xF0: break;
-        case 0xF1: break;
-        case 0xF2: break;
-        case 0xF3: break;
-        case 0xF4: break;
-        case 0xF5: break;
-        case 0xF6: break;
-        case 0xF7: break;
-        case 0xF8: break;
-        case 0xF9: break;
-        case 0xFA: break;
-        case 0xFB: break;
-        case 0xFC: break;
-        case 0xFD: break;
-        case 0xFE: break;
-        case 0xFF: break;
+        case 0x98: RES(&B, 3); break;
+        case 0x99: RES(&C, 3); break;
+        case 0x9A: RES(&D, 3); break;
+        case 0x9B: RES(&E, 3); break;
+        case 0x9C: RES(&H, 3); break;
+        case 0x9D: RES(&L, 3); break;
+        case 0x9E: RESMEM(3); break;
+        case 0x9F: RES(&A, 3); break;
+
+        case 0xA0: RES(&B, 4); break;
+        case 0xA1: RES(&C, 4); break;
+        case 0xA2: RES(&D, 4); break;
+        case 0xA3: RES(&E, 4); break;
+        case 0xA4: RES(&H, 4); break;
+        case 0xA5: RES(&L, 4); break;
+        case 0xA6: RESMEM(4); break;
+        case 0xA7: RES(&A, 4); break;
+
+        case 0xA8: RES(&B, 5); break;
+        case 0xA9: RES(&C, 5); break;
+        case 0xAA: RES(&D, 5); break;
+        case 0xAB: RES(&E, 5); break;
+        case 0xAC: RES(&H, 5); break;
+        case 0xAD: RES(&L, 5); break;
+        case 0xAE: RESMEM(5); break;
+        case 0xAF: RES(&A, 5); break;
+
+        case 0xB0: RES(&B, 6); break;
+        case 0xB1: RES(&C, 6); break;
+        case 0xB2: RES(&D, 6); break;
+        case 0xB3: RES(&E, 6); break;
+        case 0xB4: RES(&H, 6); break;
+        case 0xB5: RES(&L, 6); break;
+        case 0xB6: RESMEM(6); break;
+        case 0xB7: RES(&A, 6); break;
+
+        case 0xB8: RES(&B, 7); break;
+        case 0xB9: RES(&C, 7); break;
+        case 0xBA: RES(&D, 7); break;
+        case 0xBB: RES(&E, 7); break;
+        case 0xBC: RES(&H, 7); break;
+        case 0xBD: RES(&L, 7); break;
+        case 0xBE: RESMEM(7); break;
+        case 0xBF: RES(&A, 7); break;
+
+        case 0xC0: _SET(&B, 0); break;  
+        case 0xC1: _SET(&C, 0); break;  
+        case 0xC2: _SET(&D, 0); break;  
+        case 0xC3: _SET(&E, 0); break;  
+        case 0xC4: _SET(&H, 0); break;  
+        case 0xC5: _SET(&L, 0); break;  
+        case 0xC6: _SETMEM(0); break; 
+        case 0xC7: _SET(&A, 0); break;  
+        case 0xC8: _SET(&B, 1); break;  
+        case 0xC9: _SET(&C, 1); break;  
+        case 0xCA: _SET(&D, 1); break;  
+        case 0xCB: _SET(&E, 1); break;  
+        case 0xCC: _SET(&H, 1); break;  
+        case 0xCD: _SET(&L, 1); break;          
+        case 0xCE: _SETMEM(1); break; 
+        case 0xCF: _SET(&A, 1); break;  
+        
+        case 0xD0: _SET(&B, 2); break;
+        case 0xD1: _SET(&C, 2); break;
+        case 0xD2: _SET(&D, 2); break;
+        case 0xD3: _SET(&E, 2); break;
+        case 0xD4: _SET(&H, 2); break;
+        case 0xD5: _SET(&L, 2); break;
+        case 0xD6: _SETMEM(2); break;
+        case 0xD7: _SET(&A, 2); break;
+        case 0xD8: _SET(&B, 3); break;
+        case 0xD9: _SET(&C, 3); break;
+        case 0xDA: _SET(&D, 3); break;
+        case 0xDB: _SET(&E, 3); break;
+        case 0xDC: _SET(&H, 3); break;
+        case 0xDD: _SET(&L, 3); break;
+        case 0xDE: _SETMEM(3); break;
+        case 0xDF: _SET(&A, 3); break;
+
+        case 0xE0: _SET(&B, 4); break;
+        case 0xE1: _SET(&C, 4); break;
+        case 0xE2: _SET(&D, 4); break;
+        case 0xE3: _SET(&E, 4); break;
+        case 0xE4: _SET(&H, 4); break;
+        case 0xE5: _SET(&L, 4); break;
+        case 0xE6: _SETMEM(4); break;
+        case 0xE7: _SET(&A, 4); break;
+        case 0xE8: _SET(&B, 5); break;
+        case 0xE9: _SET(&C, 5); break;
+        case 0xEA: _SET(&D, 5); break;
+        case 0xEB: _SET(&E, 5); break;
+        case 0xEC: _SET(&H, 5); break;
+        case 0xED: _SET(&L, 5); break;
+        case 0xEE: _SETMEM(5); break;
+        case 0xEF: _SET(&A, 5); break;
+
+        case 0xF0: _SET(&B, 6); break;
+        case 0xF1: _SET(&C, 6); break;
+        case 0xF2: _SET(&D, 6); break;
+        case 0xF3: _SET(&E, 6); break;
+        case 0xF4: _SET(&H, 6); break;
+        case 0xF5: _SET(&L, 6); break;
+        case 0xF6: _SETMEM(6); break;
+        case 0xF7: _SET(&A, 6); break;
+        case 0xF8: _SET(&B, 7); break;
+        case 0xF9: _SET(&C, 7); break;
+        case 0xFA: _SET(&D, 7); break;
+        case 0xFB: _SET(&E, 7); break;
+        case 0xFC: _SET(&H, 7); break;
+        case 0xFD: _SET(&L, 7); break;
+        case 0xFE: _SETMEM(7); break;
+        case 0xFF: _SET(&A, 7); break;
 
         default: break;
     }
