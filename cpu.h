@@ -77,7 +77,6 @@ typedef struct{
 #define HL cpu.regs.hl
 
 byte cycle();
-static void execute(byte opcode);
 void cpu_init();
 void print_registers();
 
