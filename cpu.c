@@ -212,7 +212,7 @@ static inline void JPN(byte flag, byte opcode){ //jump if not set
 static inline void JRS(byte flag, byte opcode){ //jump if set
     const byte flag_set = F & flag;
     if(flag_set){
-        PC+= (int)read(PC+1); //need signed data here     
+        PC+= (int8_t)read(PC+1); //need signed data here     
         cycles[opcode] = 12; 
     }else{
         cycles[opcode] = 8;
@@ -238,7 +238,7 @@ static inline void JP(){
 }
 
 static inline void JR(){
-    PC+=(int)read(PC+1);
+    PC+=(int8_t)read(PC+1);
 }
 
 //https://blog.ollien.com/posts/gb-daa/ 
@@ -329,13 +329,15 @@ static inline void CALL(){
 static inline void RET(){
     const byte low = read(SP); SP++;
     const byte high = read(SP); SP++;
-    const word address = low | (high << 8);
-    PC = address;
+    PC = low | (high << 8); 
 }
 
-static inline void RETN(byte flag){
+static inline void RETN(byte flag, byte opcode){
     if(!(F & flag)){
         RET();
+        pc_inc[opcode] = 0;
+    }else{
+        pc_inc[opcode] = 1;
     }
 }
 
@@ -355,7 +357,7 @@ static inline void POP(word *dst){
     F &= ~0x0F;
 }
 
-static inline void PUSH(word *dst){
+extern void PUSH(word *dst){
     SP--; write(SP, (*dst >> 8));
     SP--; write(SP, *dst & 0x00FF);
 }
@@ -395,9 +397,12 @@ static inline void ADD16(word* dst, word val) {
 }
 
 static inline void ADC(byte *dst, byte val){
-    const byte carry_set = F & FLAG_C;
-    const word dst_val = *dst;
-    const word result = dst_val + val + carry_set;
+    byte carry_set = 0;
+    if(F & FLAG_C){
+        carry_set = 1;
+    }
+    const byte dst_val = *dst;
+    word result = dst_val + val + carry_set;
     *dst = (byte)result;
     SET_FLAGS(*dst == 0, 
             RESET, 
@@ -829,7 +834,7 @@ static void execute(byte opcode){
         case 0xBE: CP(&A, read(HL)); break;
         case 0xBF: CP(&A, A); break;
 
-        case 0xC0: RETN(FLAG_Z); break;
+        case 0xC0: RETN(FLAG_Z, 0xC0); break;
         case 0xC1: POP(&BC); break;
         case 0xC2: JPN(FLAG_Z, 0xC2); break;
         case 0xC3: JP(); break;
@@ -846,7 +851,7 @@ static void execute(byte opcode){
         case 0xCE: ADC(&A, read(PC + 1)); break;
         case 0xCF: RST(0x08); break;
 
-        case 0xD0: RETN(FLAG_C); break;
+        case 0xD0: RETN(FLAG_C, 0xD0); break;
         case 0xD1: POP(&DE); break;
         case 0xD2: JPN(FLAG_C, 0xD2); break;
         case 0xD3: break;
@@ -1233,9 +1238,9 @@ static byte pc_inc[0x100] = {
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0x90 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0xA0 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0xB0 */
-    1,  1,  3,  0,  0,  1,  2,  3,  1,  0,  3,  1,  0,  0,  2,  1,	/* 0xC0 */
-    1,  1,  3, -1,  0,  1,  2,  1,  1,  1,  3, -1,  0, -1,  2,  1,	/* 0xD0 */
-    2,  1,  1, -1, -1,  1,  2,  3,  2,  1,  3, -1, -1, -1,  2,  1,	/* 0xE0 */
+    1,  1,  3,  0,  0,  1,  2,  3,  0,  0,  3,  1,  0,  0,  2,  1,	/* 0xC0 */
+    0,  1,  3, -1,  0,  1,  2,  1,  1,  1,  3, -1,  0, -1,  2,  1,	/* 0xD0 */
+    2,  1,  1, -1, -1,  1,  2,  3,  2,  0,  3, -1, -1, -1,  2,  1,	/* 0xE0 */
     2,  1,  1,  1, -1,  1,  2,  1,  2,  1,  3,  1, -1, -1,  2,  1	/* 0xF0 */
 };
 

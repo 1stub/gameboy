@@ -59,6 +59,11 @@ typedef struct{
     byte is_halted;
 } CPU;
 
+extern CPU cpu;
+
+//needed for interrupts
+extern void PUSH(word *dst);
+
 #define PC  cpu.pc
 #define SP  cpu.sp
 #define IME cpu.ime
