@@ -7,7 +7,10 @@
 
 typedef struct{
     byte memory[0x10000];
+    int divider_counter;
 }MMU;
+
+extern MMU mmu;
 
 extern void mmu_init();
 extern byte read(word address);

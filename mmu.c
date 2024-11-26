@@ -2,7 +2,7 @@
 
 #define MEM mmu.memory 
 
-static MMU mmu;
+MMU mmu;
 
 extern void mmu_init(){
     MEM[TIMA] = 0x00 ; 
@@ -50,6 +50,10 @@ word read16(word address){
 }
 
 void write(word address, byte value){
+    if(address == DIV){
+        MEM[address] = 0x00;
+        mmu.divider_counter = 0;
+    }
     MEM[address] = value;
 }
 
