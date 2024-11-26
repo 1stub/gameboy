@@ -465,13 +465,13 @@ static inline void CP(byte *dst, byte val){
 
 //the following instructions are only used in the extended instruction set.
 static inline void RLC(byte *reg){
-    const int will_carry = *reg & (1<<7);
+    const byte will_carry = *reg & (1<<7);
     *reg <<= 1;
     if(will_carry) *reg += 1;
     SET_FLAGS(*reg == 0, 
             RESET, 
             RESET, 
-            RESET
+            will_carry 
     ); 
 }
 
@@ -482,7 +482,7 @@ static inline void RLCMEM(){
 }
 
 static inline void RRC(byte *reg){
-    const int will_carry = *reg & 0x01;
+    const byte will_carry = *reg & 0x01;
     *reg >>= 1;
     if(will_carry) *reg |= (1<<7);
     SET_FLAGS(*reg == 0, 
@@ -931,7 +931,7 @@ static void extended_execute(byte opcode) {
         case 0x06: RLCMEM(); break;
         case 0x07: RLC(&A); break;
         case 0x08: RRC(&B);break;
-        case 0x09: RRC(&B);break;
+        case 0x09: RRC(&C);break;
         case 0x0A: RRC(&D);break;
         case 0x0B: RRC(&E);break;
         case 0x0C: RRC(&H);break;
