@@ -4,13 +4,15 @@
 
 static void do_interrupts();
 
-void emulate(){
+void emulate(int debug){
     while(1){
-        //print_registers();
+        if(debug) print_registers();
+        else{
+            char out = perform_serial();
+            if(out != '\0') printf("%c", out);
+        }
         cycle(); 
         do_interrupts();
-        char out = perform_serial();
-        if(out != '\0') printf("%c", out);
     }
 }
 
@@ -20,7 +22,7 @@ void service_interrupt(int i){
     req &= ~(1 << i); //clear interrupt bit
     write(IF, req);
 
-    PUSH(&PC);
+    PUSH(&PC); //this is a direct call to push instruction from our cpu
 
     switch(i){ 
         case 0: PC = 0x40; break; //vblank

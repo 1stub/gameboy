@@ -92,7 +92,7 @@ static inline void INC(byte *dst){
 }
 
 static inline void LDHL(){
-    byte val = read(PC + 1);
+    const int8_t val = (int8_t)read(PC + 1);
     HL = SP + val;
     SET_FLAGS(RESET, 
             RESET, 
@@ -102,7 +102,8 @@ static inline void LDHL(){
 }
 
 static inline void ADDSP(){
-    byte val = read(PC + 1);
+    //imediate data needed to be signed, hence int8_t instead of byte
+    const int8_t val = (int8_t)read(PC + 1);
     SET_FLAGS(RESET, 
             RESET, 
             ((SP & 0x0F) + (val & 0x0F)) > 0x0F, 
@@ -202,9 +203,11 @@ static inline void JPN(byte flag, byte opcode){ //jump if not set
     if(!flag_set){
         byte low = read(PC + 1);
         byte high = read(PC + 2);
-        PC = low | (high << 8);
+        PC = low | (high << 8); 
+        pc_inc[opcode] = 0;
         cycles[opcode] = 16; 
-    }else{
+    }else{ 
+        pc_inc[opcode] = 3;
         cycles[opcode] = 12;
     }
 }
@@ -212,7 +215,7 @@ static inline void JPN(byte flag, byte opcode){ //jump if not set
 static inline void JRS(byte flag, byte opcode){ //jump if set
     const byte flag_set = F & flag;
     if(flag_set){
-        PC+= (int8_t)read(PC+1); //need signed data here     
+        PC+= (int8_t)read(PC+1); //need signed data here      
         cycles[opcode] = 12; 
     }else{
         cycles[opcode] = 8;
@@ -224,9 +227,11 @@ static inline void JPS(byte flag, byte opcode){ //jump if set
     if(flag_set){
         byte low = read(PC + 1);
         byte high = read(PC + 2);
-        PC = low | (high << 8);
+        PC = low | (high << 8); 
+        pc_inc[opcode] = 0;
         cycles[opcode] = 16; 
     }else{
+        pc_inc[opcode] = 3;
         cycles[opcode] = 12;
     }
 }
@@ -244,9 +249,9 @@ static inline void JR(){
 //https://blog.ollien.com/posts/gb-daa/ 
 static inline void DAA(){
     byte should_carry = 0;
-    byte half_carry = F & FLAG_H;
-    byte carry = F & FLAG_C;
-    byte subtract = F & FLAG_N;
+    const byte half_carry = F & FLAG_H ? 1 : 0;
+    const byte carry = F & FLAG_C ? 1 : 0;
+    const byte subtract = F & FLAG_N ? 1 : 0;
     
     const byte dst_val = A;
     byte offset = 0;
@@ -313,8 +318,10 @@ static inline void CALLS(byte flag, byte opcode){
         SP--; write(SP, (PC+3) >> 8);
         SP--; write(SP, (PC+3) & 0x00FF);
         PC = address;
+        pc_inc[opcode] = 0;
         cycles[opcode] = 24;
-    }else{
+    }else{ 
+        pc_inc[opcode] = 3;
         cycles[opcode] = 12;
     }
 }
@@ -344,8 +351,10 @@ static inline void RETN(byte flag, byte opcode){
 static inline void RETS(byte flag, byte opcode){
     if(F & flag){
         RET();
+        pc_inc[opcode] = 0;
         cycles[opcode] = 20;
     }else{
+        pc_inc[opcode] = 1;
         cycles[opcode] = 8;
     }
 }
@@ -366,8 +375,7 @@ static inline void RST(byte val){
     PC++; SP--;
     write(SP, PC >> 8); SP--;
     write(SP, PC & 0x00FF); 
-    word address = val | (0x00 << 8); 
-    PC = address;
+    PC = val | (0x00 << 8); 
 }
 
 static inline void HALT(){
@@ -397,10 +405,7 @@ static inline void ADD16(word* dst, word val) {
 }
 
 static inline void ADC(byte *dst, byte val){
-    byte carry_set = 0;
-    if(F & FLAG_C){
-        carry_set = 1;
-    }
+    const byte carry_set = (F & FLAG_C) ? 1 : 0;
     const byte dst_val = *dst;
     word result = dst_val + val + carry_set;
     *dst = (byte)result;
@@ -423,7 +428,7 @@ static inline void SUB(byte *dst, byte val){
 }
 
 static inline void SBC(byte *dst, byte val){ 
-    const byte carry_set = F & FLAG_C;
+    const byte carry_set = (F & FLAG_C) ? 1 : 0;
     const byte dst_val = *dst;
     const word result = dst_val - val - carry_set;
     *dst = (byte)result;
@@ -863,7 +868,7 @@ static void execute(byte opcode){
         case 0xD9: RET(); IME = 1; break;
         case 0xDA: JPS(FLAG_C, 0xDA); break;
         case 0xDB: break;
-        case 0xDC: CALLS(FLAG_C, 0xDB); break;
+        case 0xDC: CALLS(FLAG_C, 0xDC); break;
         case 0xDD: break;
         case 0xDE: SBC(&A, read(PC + 1)); break;
         case 0xDF: RST(0x18); break;
@@ -1238,10 +1243,10 @@ static byte pc_inc[0x100] = {
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0x90 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0xA0 */
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,	/* 0xB0 */
-    1,  1,  3,  0,  0,  1,  2,  3,  0,  0,  3,  1,  0,  0,  2,  1,	/* 0xC0 */
-    0,  1,  3, -1,  0,  1,  2,  1,  1,  1,  3, -1,  0, -1,  2,  1,	/* 0xD0 */
-    2,  1,  1, -1, -1,  1,  2,  3,  2,  0,  3, -1, -1, -1,  2,  1,	/* 0xE0 */
-    2,  1,  1,  1, -1,  1,  2,  1,  2,  1,  3,  1, -1, -1,  2,  1	/* 0xF0 */
+    1,  1,  0,  0,  0,  1,  2,  0,  0,  0,  0,  1,  0,  0,  2,  0,	/* 0xC0 */
+    0,  1,  0, -1,  0,  1,  2,  0,  0,  0,  0, -1,  0, -1,  2,  0,	/* 0xD0 */
+    2,  1,  1, -1, -1,  1,  2,  0,  2,  0,  3, -1, -1, -1,  2,  0,	/* 0xE0 */
+    2,  1,  1,  1, -1,  1,  2,  0,  2,  1,  3,  1, -1, -1,  2,  0	/* 0xF0 */
 };
 
 static const byte extended_cycles[0x100] = {

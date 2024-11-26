@@ -3,6 +3,6 @@
 
 #include "cpu.h"
 
-extern void emulate();
+extern void emulate(int debug);
 
 #endif
