@@ -57,6 +57,7 @@ typedef struct{
     word sp;
     word pc;
     byte is_halted;
+    byte halt_bug;
 } CPU;
 
 extern CPU cpu;

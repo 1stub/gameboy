@@ -40,12 +40,30 @@ void cpu_init(){
     IME = 0;
     cpu.cycles = 0;
     cpu.is_halted = 0;
+    cpu.halt_bug = 0;
 }
 
 //our cpu will cycle in increments of 4 T cycles (1 Machine Cycle) 
 byte cycle(){
+    if(cpu.is_halted){
+        if (IME && (read(IF) & read(IE))) {
+            cpu.is_halted = 0;
+            cpu.halt_bug = 0;
+        }else if(!IME && (read(IF) & read(IE))){
+            cpu.is_halted = 0;
+            cpu.halt_bug = 1;
+        }
+    }
+
+    if(cpu.is_halted){
+        return 4;
+    }
+    if(cpu.halt_bug){
+        cpu.halt_bug = 0;
+        PC++;
+    }
     const byte cur_instr = read(PC);
-    execute(cur_instr);
+    execute(cur_instr);    
     
     return cpu.cycles;
 }
@@ -909,8 +927,8 @@ static void execute(byte opcode){
 
         default: break;
     }
-    if( opcode == 0xCB){
 
+    if(opcode == 0xCB){
         PC += extended_pc_inc[opcode];
         cpu.cycles = extended_cycles[opcode];   
     }else{
