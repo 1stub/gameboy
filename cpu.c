@@ -58,6 +58,7 @@ byte cycle(){
     if(cpu.is_halted){
         return 4;
     }
+    //if a haltbug occurs, skip next instruction
     if(cpu.halt_bug){
         cpu.halt_bug = 0;
         PC++;
