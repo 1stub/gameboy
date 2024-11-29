@@ -1,8 +1,8 @@
 #include "ppu.h"
-#include "interrupt.h"
 
 static void set_ppu_state();
 static void update_lcd();
+static void draw_scanline();
 
 PPU ppu;
 
@@ -10,11 +10,11 @@ void ppu_init(){
     ppu.scanline_counter = 456;
 }
 
-void update_graphics(int cycles){ 
+int update_graphics(int cycles){ 
     update_lcd();
     if(read(LCDC) & (1<<7)){
         ppu.scanline_counter -= cycles;
-    }else return ;
+    }else return 1;
 
     //we hit 456 cycles, meaning we need to go to next line
     if(ppu.scanline_counter <= 0){
@@ -22,13 +22,15 @@ void update_graphics(int cycles){
         mmu.memory[LY]++; //we dont want to reset LY here
         ppu.scanline_counter = 456;
         if(cur_line == 144){
-            request_interrupt(0);
+            request_interrupt(0); //vblank interrupt
         }else if(cur_line > 153){
             write(LY, 0);
         }else{
-            //draw the line
+            draw_scanline(); 
+            return render_display(); 
         }
     }
+    return 1;
 }
 
 static void update_lcd(){
@@ -40,6 +42,10 @@ static void update_lcd(){
         case VBlank:
         default: break;
     }
+}
+
+static void draw_scanline(){
+    //do sometyhing
 }
 
 static void set_ppu_state(){

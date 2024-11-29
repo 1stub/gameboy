@@ -2,6 +2,7 @@
 #define PPU_H
 
 #include "mmu.h"
+#include "display.h"
 #include "interrupt.h"
 
 // Our ppu scanlines take 456 T-Cycles to complete
@@ -26,6 +27,6 @@ typedef struct{
 extern PPU ppu;
 
 extern void ppu_init();
-extern void update_graphics(int cycles);
+extern int update_graphics(int cycles);
 
 #endif

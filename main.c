@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "display.h"
 #include "emulator.h"
 
 int main(int argc, char **argv){
@@ -11,5 +12,6 @@ int main(int argc, char **argv){
     load_rom(argv[1]);
     mmu_init();
     cpu_init();
+    display_init();
     emulate(is_debug);
 }

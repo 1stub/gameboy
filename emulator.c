@@ -1,7 +1,8 @@
 #include "emulator.h"
 
 void emulate(int debug){
-    while(1){
+    static int running = 1;
+    while(running){
         if(debug) print_registers();
         if(!debug){
             char out = perform_serial();
@@ -9,7 +10,7 @@ void emulate(int debug){
         }
         byte cycles = cycle(); 
         do_interrupts();
-        update_graphics(cycles);
+        running = update_graphics(cycles);
         update_timers(cycles);
     }
 }
