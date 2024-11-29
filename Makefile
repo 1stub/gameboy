@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=c23
 TARGET = gameboy 
-SRCS = mmu.c cpu.c interrupt.c timer.c emulator.c main.c   
+SRCS = mmu.c cpu.c ppu.c interrupt.c timer.c emulator.c main.c   
 OBJS = $(SRCS:.c=.o)
 
 all: $(TARGET)

@@ -29,9 +29,6 @@ extern void mmu_init(){
     MEM[LCDC] = 0x91 ; 
     MEM[SCY]  = 0x00 ;
     MEM[SCX]  = 0x00 ;
-
-    MEM[LY]   = 0x90;
-
     MEM[LYC]  = 0x00 ;
     MEM[BGP]  = 0xFC ;
     MEM[OBP0] = 0xFF ;
@@ -53,6 +50,9 @@ void write(word address, byte value){
     if(address == DIV){
         MEM[address] = 0x00;
         mmu.divider_counter = 0;
+    }
+    if(address == LY){
+        MEM[address] = 0x00;
     }
     MEM[address] = value;
 }
