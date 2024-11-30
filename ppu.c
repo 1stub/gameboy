@@ -3,11 +3,19 @@
 static void set_ppu_state();
 static void update_lcd();
 static void draw_scanline();
+static void render_tiles();
 
 PPU ppu;
 
 void ppu_init(){
     ppu.scanline_counter = 456;
+
+    //eventually would like to use custom palette
+    byte palette = read(BGP);
+    ppu.color_palette[0] = palette & (0x03);
+    ppu.color_palette[1] = palette & (0x0C);
+    ppu.color_palette[2] = palette & (0x30);
+    ppu.color_palette[3] = palette & (0xC0);
 }
 
 int update_graphics(int cycles){ 
@@ -45,7 +53,54 @@ static void update_lcd(){
 }
 
 static void draw_scanline(){
-    //do sometyhing
+    //just dealing with background for now, no sprites
+    if(read(LCDC) & (0x01)){ //BG & Window enable bit
+        render_tiles();
+    }
+}
+
+static void render_tiles(){
+    //first we need to figure out where in memory
+    //to read bg data from
+    word tile_data = 0;
+    word bg_mem = 0;
+    byte is_signed = 0;
+    byte window_enable = 0;
+
+    byte scroll_y = read(SCY);
+    byte scroll_x = read(SCX);
+    byte window_y = read(WY);
+    byte window_x = read(WX);
+
+    byte lcdc_data = read(LCDC);
+    if(lcdc_data & (1 << 5)){ //window enable 
+        if(scroll_y <= window_y){
+            window_enable = 1;
+        }
+    }
+
+    if(lcdc_data & (1 << 4)){ //BG and Window tile data area
+        tile_data = 0x8000; 
+    }else{ //this region of mem uses signed data
+        tile_data = 0x8800;
+        is_signed = 1;
+    }
+    
+    //these two checks may seem redundant, but the area of mem for our
+    //bg dependes on the window enable bit being set
+    if(!window_enable){
+        if(lcdc_data & (1 << 3)){
+            bg_mem = 0x9C00;
+        }else{
+            bg_mem = 0x9800;
+        }
+    }else{
+        if(lcdc_data & (1 << 6)){
+            bg_mem = 0x9C00;
+        }else{
+            bg_mem = 0x9800;
+        }
+    }
 }
 
 static void set_ppu_state(){

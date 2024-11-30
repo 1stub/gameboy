@@ -22,6 +22,7 @@ typedef enum{
 typedef struct{
     ppu_state state;
     int scanline_counter;
+    int color_palette[4];
 }PPU;
 
 extern PPU ppu;
