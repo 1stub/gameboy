@@ -2,11 +2,9 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
 
-const int WINDOW_HEIGHT = 144;
-const int WINDOW_WIDTH = 160;
-
 SDL_Window* main_window;
 SDL_Renderer* main_renderer;
+SDL_Texture* display_texture;
 
 SDL_Event e;
 
@@ -26,13 +24,22 @@ void display_init(){
         return ;
     }
 
+
     main_renderer = SDL_CreateRenderer(main_window, -1, SDL_RENDERER_PRESENTVSYNC);
+
+    display_texture = SDL_CreateTexture(
+        main_renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        WINDOW_WIDTH,
+        WINDOW_HEIGHT
+    );
 }
 
 void sdl_shutdown(){
-    if(main_window != NULL){
-        SDL_DestroyWindow(main_window);
-        main_window = NULL;
+    if(display_texture != NULL){
+        SDL_DestroyTexture(display_texture);
+        display_texture = NULL;
     }
 
     if(main_renderer != NULL){
@@ -40,7 +47,15 @@ void sdl_shutdown(){
         main_renderer = NULL;
     }
 
-    SDL_Quit();
+    if(main_window != NULL){
+        SDL_DestroyWindow(main_window);
+        main_window = NULL;
+    }
+}
+
+void update_display_buffer(uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT]){
+    SDL_UpdateTexture(display_texture, NULL, pixel_buffer, WINDOW_WIDTH * sizeof(uint32_t));
+
 }
 
 int render_display(){
@@ -57,7 +72,9 @@ int render_display(){
         }
     }
     if(running){
-        SDL_RenderPresent(main_renderer); 
+        SDL_RenderClear(main_renderer);
+        SDL_RenderCopy(main_renderer, display_texture, NULL, NULL);
+        SDL_RenderPresent(main_renderer);
     }
     return running;
 }

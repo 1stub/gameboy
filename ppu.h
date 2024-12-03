@@ -4,6 +4,7 @@
 #include "mmu.h"
 #include "display.h"
 #include "interrupt.h"
+#include "util.h"
 
 // Our ppu scanlines take 456 T-Cycles to complete
 // 456 -> 456 - 80 == OAM Search
@@ -23,7 +24,7 @@ typedef enum{
     Fetch_Tile_NO,
     Fetch_Tile_Low,
     Fetch_Tile_High,
-    FFIO_Push 
+    FIFO_Push 
 }fetcher_state;
 
 
@@ -33,6 +34,7 @@ typedef struct{
     int scanline_counter;
     int cur_pixel;
     int color_palette[4];
+    uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT];
 }PPU;
 
 extern PPU ppu;
