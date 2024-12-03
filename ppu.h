@@ -19,9 +19,19 @@ typedef enum{
     VBlank
 }ppu_state;
 
+typedef enum{
+    Fetch_Tile_NO,
+    Fetch_Tile_Low,
+    Fetch_Tile_High,
+    FFIO_Push 
+}fetcher_state;
+
+
 typedef struct{
-    ppu_state state;
+    ppu_state ppu_state;
+    fetcher_state fetcher;
     int scanline_counter;
+    int cur_pixel;
     int color_palette[4];
 }PPU;
 
