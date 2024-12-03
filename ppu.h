@@ -34,6 +34,7 @@ typedef struct{
     int scanline_counter;
     int cur_pixel;
     int color_palette[4];
+    int update_display;
     uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT];
 }PPU;
 

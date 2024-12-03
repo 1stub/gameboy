@@ -18,13 +18,20 @@ void ppu_init(){
     ppu.ppu_state = OAM_Search;
     ppu.fetcher = Fetch_Tile_NO;
     ppu.cur_pixel = 0;
+    ppu.update_display = 0;
 }
 
 int update_graphics(int cycles){
     cycle_ppu();
     ppu.scanline_counter -= cycles;
-
-    return render_display(); 
+    
+    //printf("%i\n", read(LY)); 
+    
+    if(ppu.update_display){
+        ppu.update_display = 0;
+        return render_display(); 
+    }
+    return 1; 
 }
 
 //this is used to get color data for our buffer to send to sdl texture
@@ -49,23 +56,50 @@ static void cycle_ppu(){
             break;
         case Pixel_Transfer:{
             //perform pixel fetching FIFO stuff
-            printf("%i\n", read(LY)); 
-            //the folloiwng code doesnt work, just using it for testing
-            byte tile_line = read(LY) % 2;
-            word tile_map_row_addr = 0x9C00 + (32*(read(LY) / 8));
+           
+            word bg_mem_base = 0;
+
+            //first find what area of bg memory we are accessing
+            if(read(LCDC) & (1<< 3)){
+                bg_mem_base = 0x9C00;
+            }else{
+                bg_mem_base = 0x9800;
+            }
+
+            //to get this to work properly here is what is need to be done:
+            //(i think). First we need to use the THIRD bit of LCDC
+            //to find the region we are currently reading background
+            //map data from. This contains the TILE NUMBERS NOT DATA.
+            //then we use the FOURTH bit of LCDC to find the region 
+            //of memory that actually contains our tile data, not just the 
+            //number. From here we can parse our data similarly to below
+            //and send it to sdl. Also, the region that stores the actual
+            //data is where we need to be careful about whether we read 
+            //it as signed or unsigned.
+            //0x8000 as base ptr uses UNSIGNED 
+            //0x8800 as base ptr uses SIGNED
+
+            //need to move all this ffio stuff into its own struct
+            word tile_map_row_addr = bg_mem_base +
+                (32 * (((read(LY) + read(SCY)) & 0xFF) / 8));
             byte tile_low = 0;
             byte tile_high = 0;
+            byte tile_id = 0;
+            static byte tile_index = 0; //the tile we are currently rendering
+
+            word tile_address = (2 * (read(LY) + read(SCY)) % 8);
 
             switch(ppu.fetcher){
                 case Fetch_Tile_NO:
                     ppu.fetcher = Fetch_Tile_Low;
+                    tile_id = read(tile_map_row_addr + tile_index);
                     break;
                 case Fetch_Tile_Low:
-                    tile_low = read(tile_map_row_addr + tile_line);
+                    tile_low = read(tile_id + tile_address);
                     ppu.fetcher = Fetch_Tile_High;
                     break;
                 case Fetch_Tile_High:
-                    tile_high = read(tile_map_row_addr + tile_line + 1);
+                    tile_high = read(tile_id + tile_address + 1);
                     ppu.fetcher = FIFO_Push;
                     break;
                 case FIFO_Push:
@@ -74,6 +108,7 @@ static void cycle_ppu(){
                         uint32_t color = get_color(tile_high, tile_low, i);
                         ppu.pixel_buffer[ppu.cur_pixel + i][read(LY)] = color; 
                     }
+                    tile_index++;
                     ppu.cur_pixel+=8;
                     ppu.fetcher = Fetch_Tile_NO;
                     break;
@@ -82,6 +117,7 @@ static void cycle_ppu(){
 
             if(ppu.cur_pixel == 160){
                 ppu.cur_pixel = 0;
+                tile_index = 0;
                 ppu.ppu_state = HBlank;
             }
             break;
@@ -106,6 +142,7 @@ static void cycle_ppu(){
             //like before. If LY == 153 then we finished vblank and go back to 
             //OAM search
             if(ppu.scanline_counter <= 0){
+                ppu.update_display = 1;
                 update_display_buffer(ppu.pixel_buffer);
                 ppu.scanline_counter = 456;
                 mmu.memory[LY]++;
