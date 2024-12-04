@@ -20,6 +20,16 @@ typedef enum{
     VBlank
 }ppu_state;
 
+typedef struct{
+    ppu_state ppu_state;
+    int scanline_counter;
+    int color_palette[4];
+    int update_display;
+    uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT];
+}PPU;
+
+extern PPU ppu;
+
 typedef enum{
     Fetch_Tile_NO,
     Fetch_Tile_Low,
@@ -27,18 +37,15 @@ typedef enum{
     FIFO_Push 
 }fetcher_state;
 
-
 typedef struct{
-    ppu_state ppu_state;
-    fetcher_state fetcher;
-    int scanline_counter;
+    fetcher_state state;
+    byte cycle_counter;
     int cur_pixel;
-    int color_palette[4];
-    int update_display;
-    uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT];
-}PPU;
-
-extern PPU ppu;
+    int cur_tile_no;
+    word cur_tile_data_low;
+    word cur_tile_data_high;
+    word cur_tile_data_address;
+}FETCHER;
 
 extern void ppu_init();
 extern int update_graphics(int cycles);
