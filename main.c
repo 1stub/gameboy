@@ -12,6 +12,7 @@ int main(int argc, char **argv){
     load_rom(argv[1]);
     mmu_init();
     cpu_init();
+    ppu_init();
     display_init();
     emulate(is_debug);
 }

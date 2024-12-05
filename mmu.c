@@ -51,10 +51,15 @@ void write(word address, byte value){
         MEM[address] = 0x00;
         mmu.divider_counter = 0;
     }
-    if(address == LY){
+    else if(address == LY){
         MEM[address] = 0x00;
     }
-    MEM[address] = value;
+    else if(address >= 0x8000 && address <=0x9FFF){ 
+        //printf("wrote %x to %x in VRAM\n", value, address);
+        MEM[address] = value;
+    }else{
+        MEM[address] = value;
+    }
 }
 
 void load_rom(char *file){

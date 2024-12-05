@@ -25,6 +25,7 @@ typedef struct{
     int scanline_counter;
     int color_palette[4];
     int update_display;
+    int is_window;
     uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT];
 }PPU;
 
@@ -41,10 +42,13 @@ typedef struct{
     fetcher_state state;
     byte cycle_counter;
     int cur_pixel;
-    int cur_tile_no;
-    word cur_tile_data_low;
-    word cur_tile_data_high;
+    byte cur_tile_no;
+    byte cur_tile_data_low;
+    byte cur_tile_data_high;
     word cur_tile_data_address;
+
+    //this is solely for testing
+    word tile_index;
 }FETCHER;
 
 extern void ppu_init();

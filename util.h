@@ -6,7 +6,7 @@
 typedef unsigned short word;
 typedef unsigned char byte;
 
-#define WINDOW_HEIGHT 144
-#define WINDOW_WIDTH 160
+#define WINDOW_HEIGHT 256 
+#define WINDOW_WIDTH 256
 
 #endif
