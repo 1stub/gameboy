@@ -1,5 +1,6 @@
 #include "ppu.h"
 #include "display.h"
+#include "interrupt.h"
 
 PPU ppu;
 FETCHER fetcher;
@@ -30,11 +31,14 @@ void ppu_init(){
     fetcher.cur_tile_data_low = 0;
     fetcher.cur_tile_data_high = 0;
     fetcher.cur_tile_data_address = 0;
-
-    fetcher.tile_index = 0;
+    fetcher.ticks = 0;
 }
 
+//when we transition to different stages of rendering a scanline we request an
+//interrput specified by STAT
 static void cycle_ppu(int cycles){
+    int req_int = 0; 
+    byte status = read(STAT);
     switch(ppu.ppu_state){
         case OAM_Search:
             //currently not dealing with sprites, so no OAM search
@@ -43,18 +47,6 @@ static void cycle_ppu(int cycles){
             }
             break;
         case Pixel_Transfer:{
-            //to get this to work properly here is what is need to be done:
-            //(i think). First we need to use the THIRD bit of LCDC
-            //to find the region we are currently reading background
-            //map data from. This contains the TILE NUMBERS NOT DATA.
-            //then we use the FOURTH bit of LCDC to find the region 
-            //of memory that actually contains our tile data, not just the 
-            //number. From here we can parse our data similarly to below
-            //and send it to sdl. Also, the region that stores the actual
-            //data is where we need to be careful about whether we read 
-            //it as signed or unsigned.
-            //0x8000 as base ptr uses UNSIGNED 
-            //0x8800 as base ptr uses SIGNED
             word tile_no_baseptr = 0;
             const byte lcdc_status = read(LCDC);
             
@@ -107,8 +99,10 @@ static void cycle_ppu(int cycles){
 
             //160 pixels in a scanline
             if(fetcher.cur_pixel >= 160){
+                if(status & (1<<3)){
+                    req_int = 1;
+                }
                 fetcher.cur_pixel = 0;
-                fetcher.tile_index = 0;
                 ppu.ppu_state = HBlank;
             }
             break;
@@ -122,6 +116,10 @@ static void cycle_ppu(int cycles){
                 ppu.scanline_counter = 456;
                 mmu.memory[LY]++;
                 if(read(LY) == 144){
+                    update_display_buffer(ppu.pixel_buffer);
+                    if(status & (1<<4)){
+                        req_int = 1;
+                    }
                     ppu.ppu_state = VBlank;
                 }else{
                     ppu.ppu_state = OAM_Search;
@@ -136,22 +134,41 @@ static void cycle_ppu(int cycles){
                 ppu.update_display = 1;
                 ppu.scanline_counter = 456;
                 mmu.memory[LY]++;
-                if(read(LY) == 153){
+                if(read(LY) == 153){ 
                     write(LY, 0);
-                    //request_interrupt(0);
+                    if(status & (1<<5)){
+                        req_int = 1;
+                    }
                     ppu.ppu_state = OAM_Search;
-                    update_display_buffer(ppu.pixel_buffer);
                 }
             }
             break;
         default: break;
     }
+   
+    //request lcd interrupt
+    if(req_int){
+        request_interrupt(1);
+    }
+
+    //check if ly == lyc, request interrupt
+    if(read(LY) == read(LYC)){
+        status &= (1 << 2);
+        if(status & (1 << 6)){
+            request_interrupt(1);       
+        }
+    }else{
+        status &= ~(1 << 2); 
+    }
+    write(STAT, status);
 }
 
-//as of now this fetcher ONLY fetches background tiles
-//many of the offsets being used will change if deailing with window tiles
 static void 
 update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, byte y_pos){
+    fetcher.ticks++;
+    if(fetcher.ticks < 2) return;
+    else fetcher.ticks = 0;
+
     switch(fetcher.state){
         case Fetch_Tile_NO:{
             word row = (((byte)(y_pos/8) & 0xFF) * 32);
@@ -161,7 +178,7 @@ update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, b
             }break;
         case Fetch_Tile_Low:{
             byte line = (y_pos % 8) * 2;
-            fetcher.cur_tile_data_address = fetcher.cur_tile_no + tile_no_baseptr + line;
+            fetcher.cur_tile_data_address = fetcher.cur_tile_no + bg_tiledata_baseptr + line;
             if(is_signed){
                 fetcher.cur_tile_data_low = (int8_t)read(fetcher.cur_tile_data_address);
             }else{
@@ -184,9 +201,8 @@ update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, b
                     fetcher.cur_tile_data_low, fetcher.cur_tile_data_high, i);
                 ppu.pixel_buffer[fetcher.cur_pixel + i][read(LY)] = color;
             }
-            fetcher.cur_pixel += 8;
-            fetcher.tile_index++;
 
+            fetcher.cur_pixel += 8;
             fetcher.state = Fetch_Tile_NO;
             break;
         default: break;
@@ -194,12 +210,18 @@ update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, b
 }
 
 int update_graphics(int cycles){
+    printf("LY = %i", read(LY));
     cycle_ppu(cycles);
     if(read(LCDC) & (1 << 7)){
         ppu.scanline_counter -= cycles;
+    }else{
+        //lcdc disabled, reset STAT and scanline
+        ppu.scanline_counter = 456;
+        write(LY, 0);
+        byte status = read(STAT);
+        status &= 252;
+        write(STAT, status);
     }
-    
-    //printf("%i\n", read(LY)); 
     
     if(ppu.update_display){
         ppu.update_display = 0;

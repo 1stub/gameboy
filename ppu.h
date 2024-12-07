@@ -46,9 +46,7 @@ typedef struct{
     byte cur_tile_data_low;
     byte cur_tile_data_high;
     word cur_tile_data_address;
-
-    //this is solely for testing
-    word tile_index;
+    int ticks;
 }FETCHER;
 
 extern void ppu_init();

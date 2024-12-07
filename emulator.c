@@ -9,8 +9,8 @@ void emulate(int debug){
             if(out != '\0') printf("%c", out);
         }
         byte cycles = cycle(); 
-        do_interrupts();
-        running = update_graphics(cycles);
         update_timers(cycles);
+        running = update_graphics(cycles);
+        do_interrupts();
     }
 }
