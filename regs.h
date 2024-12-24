@@ -8,6 +8,7 @@
 #define TIMA 0xFF05
 #define TMA  0xFF06
 #define TAC  0xFF07
+#define NR   0xFF10
 #define LCDC 0xFF40
 #define STAT 0xFF41
 #define SCY  0xFF42

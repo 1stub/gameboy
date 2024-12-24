@@ -2,16 +2,35 @@
 #include "display.h"
 #include "interrupt.h"
 
+//this code sucks
+//sucks HARD as shit. some hot garbage I hate it
+//when I find the time (after finals) I need to rewrite EVERTHING
+//well maybe not everything (display using texture of pixels is fine)
+//
+//i now have the "general" understanding of what I need to do in the ppu
+//so HOPEFULLY a ppu rewrite will end up getting some bg tiles on the display
+//i'm sure there are going to be even more rewrites and reiterations
+//but for now just a general rewrite with my "deeper" understanding of what
+//the ppu actually does should put me in a good enough spot to get some real
+//proper pixels on the screen
+//
+//the main problem that i am aware of is that i just compute offsets for tile
+//data wrong. i am almost 100% sure of this. also issues likely arrise due to
+//poor interrupt timing and overally lack of sync with the cpu. i think though
+//there should still be some proper pixels being drawn even if this shit
+//is not cycle accurate.
+
 PPU ppu;
 FETCHER fetcher;
 
 static void cycle_ppu(int cycles);
 static void 
-update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, byte y_pos);
+update_fetcher();
 static uint32_t get_color(byte tile_high, byte tile_low, int bit_position);
+static void calc_tile_offsets();
 
 void ppu_init(){
-    ppu.scanline_counter = 456;
+    ppu.cycles = 0;
 
     //eventually would like to use custom palette
     byte palette = read(BGP);
@@ -20,188 +39,105 @@ void ppu_init(){
     ppu.color_palette[2] = palette & (0x30);
     ppu.color_palette[3] = palette & (0xC0);
 
-    ppu.ppu_state = OAM_Search;
+    ppu.state = OAM_Search;
     ppu.update_display = 0;
     ppu.is_window = 0;
 
     fetcher.state = Fetch_Tile_NO;
-    fetcher.cycle_counter = 0;
+    fetcher.is_signed = 0;
     fetcher.cur_pixel = 0;
-    fetcher.cur_tile_no = 0;
-    fetcher.cur_tile_data_low = 0;
-    fetcher.cur_tile_data_high = 0;
-    fetcher.cur_tile_data_address = 0;
-    fetcher.ticks = 0;
+    fetcher.tile_map_bp = 0;
+    fetcher.tile_data_bp = 0;
+
+    fetcher.cur_tile_x = 0;
+    fetcher.cur_tile_y = 0;
+    fetcher.tile_no = 0;
+    fetcher.tile_low = 0;
+    fetcher.tile_high = 0;
 }
 
-//when we transition to different stages of rendering a scanline we request an
-//interrput specified by STAT
-static void cycle_ppu(int cycles){
-    int req_int = 0; 
-    byte status = read(STAT);
-    switch(ppu.ppu_state){
+//we need to set flags upon ppu state transfer
+//we will set necessary flags, raise STAT interrupt request
+//then call handler
+//
+//also current issue is related to the fact that our ppu never reaches the
+//ly == 153 condition causing us to never display anything
+//
+//TODO: add stat flags upon state transfers to call lcd interrupt
+static void cycle_ppu(int cpu_cycles){
+    int request_int = 0;
+
+    switch(ppu.state){
         case OAM_Search:
-            //currently not dealing with sprites, so no OAM search
-            if(ppu.scanline_counter <= 456 - 80){
-                ppu.ppu_state = Pixel_Transfer;
+            if(ppu.cycles >= 80){
+                //prepare offsets for entering pixel transfer
+                calc_tile_offsets();
+                write(STAT, (read(STAT) | 0xFC) | 0x03);
+                ppu.state = Pixel_Transfer;
             }
             break;
-        case Pixel_Transfer:{
-            word tile_no_baseptr = 0;
-            const byte lcdc_status = read(LCDC);
-            
-            //window enable
-            if(lcdc_status & (1 << 5)){
-                if(read(WY) <= read(LY)){
-                    ppu.is_window = 1;
-                }else{
-                    ppu.is_window = 0;
-                }
-            }else{
-                ppu.is_window = 0;
-            }
 
-            if(ppu.is_window){
-                //if using window, 6th bit gives window tile map
-                if(lcdc_status & (1 << 6)){
-                    tile_no_baseptr = 0x9C00;
-                }else{
-                    tile_no_baseptr = 0x9800;
-                }
-            }else{
-                //otherwise we are using bg, so check 3rd bit
-                if(lcdc_status & (1 << 3)){
-                    tile_no_baseptr = 0x9C00;
-                }else{
-                    tile_no_baseptr = 0x9800;
-                }
-            }
-
-            word bg_tiledata_baseptr = 0;
-            byte is_signed = 0;
-            if(lcdc_status & (1 << 4)){
-                bg_tiledata_baseptr = 0x8000;
-            }else{
-                bg_tiledata_baseptr = 0x9000;
-                is_signed = 1;
-            }
-
-            //now run checks to determine which of the 32 vertical tiles
-            //our scanline is currently drawing, send to fetcher
-            byte y_pos = 0;
-            if(!ppu.is_window){
-                y_pos = read(SCY) - read(LY);
-            }else{
-                y_pos = read(LY) - read(WY);
-            }
-
-            update_fetcher(tile_no_baseptr, bg_tiledata_baseptr, is_signed, y_pos);
-
-            //160 pixels in a scanline
-            if(fetcher.cur_pixel >= 160){
-                if(status & (1<<3)){
-                    req_int = 1;
-                }
+        case Pixel_Transfer:
+            update_fetcher();
+            if(fetcher.cur_pixel == 160){
                 fetcher.cur_pixel = 0;
-                ppu.ppu_state = HBlank;
+                write(STAT, (read(STAT) | 0xFC) | 0x00);
+                ppu.state = HBlank;
             }
             break;
-        }
+
         case HBlank:
-            //when our scanline is 0 we move to next line
-            //so we need to update LY and reset our counter
-            //if we run out of vertical scanlines this indicates
-            //we have reached vblank
-            if(ppu.scanline_counter <= 0){
-                ppu.scanline_counter = 456;
+            if(ppu.cycles >= 456){
+                ppu.cycles = 0;
                 mmu.memory[LY]++;
                 if(read(LY) == 144){
-                    update_display_buffer(ppu.pixel_buffer);
-                    if(status & (1<<4)){
-                        req_int = 1;
-                    }
-                    ppu.ppu_state = VBlank;
+                    write(STAT, (read(STAT) | 0xFC) | 0x01);
+                    ppu.state = VBlank;
                 }else{
-                    ppu.ppu_state = OAM_Search;
+                    write(STAT, (read(STAT) | 0xFC) | 0x02);
+                    ppu.state = OAM_Search;
                 }
             }
             break;
+
         case VBlank:
-            //just need to check when we finish a line, update LY and counter
-            //like before. If LY == 153 then we finished vblank and go back to 
-            //OAM search
-            if(ppu.scanline_counter <= 0){
-                ppu.update_display = 1;
-                ppu.scanline_counter = 456;
+            if(ppu.cycles >= 456){
+                ppu.cycles = 0;
                 mmu.memory[LY]++;
-                if(read(LY) == 153){ 
+                if(read(LY) == 153){
+                    //update display at end of frame
+                    ppu.update_display = 1;
                     write(LY, 0);
-                    if(status & (1<<5)){
-                        req_int = 1;
-                    }
-                    ppu.ppu_state = OAM_Search;
+                    ppu.cycles = 0; 
+                    write(STAT, (read(STAT) | 0xFC) | 0x02);
+                    ppu.state = OAM_Search;
                 }
             }
             break;
+
         default: break;
     }
-   
-    //request lcd interrupt
-    if(req_int){
-        request_interrupt(1);
-    }
 
-    //check if ly == lyc, request interrupt
-    if(read(LY) == read(LYC)){
-        status &= (1 << 2);
-        if(status & (1 << 6)){
-            request_interrupt(1);       
-        }
-    }else{
-        status &= ~(1 << 2); 
+    if(request_int){
+        request_interrupt(1); //stat interrupt
     }
-    write(STAT, status);
 }
 
-static void 
-update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, byte y_pos){
-    fetcher.ticks++;
-    if(fetcher.ticks < 2) return;
-    else fetcher.ticks = 0;
-
+static void update_fetcher(){
     switch(fetcher.state){
-        case Fetch_Tile_NO:{
-            word row = (((byte)(y_pos/8) & 0xFF) * 32);
-            word col = ((byte)(fetcher.cur_pixel/8));
-            fetcher.cur_tile_no = read(tile_no_baseptr + row + col);
+        case Fetch_Tile_NO:
             fetcher.state = Fetch_Tile_Low;
-            }break;
-        case Fetch_Tile_Low:{
-            byte line = (y_pos % 8) * 2;
-            fetcher.cur_tile_data_address = fetcher.cur_tile_no + bg_tiledata_baseptr + line;
-            if(is_signed){
-                fetcher.cur_tile_data_low = (int8_t)read(fetcher.cur_tile_data_address);
-            }else{
-                fetcher.cur_tile_data_low = (int8_t)read(fetcher.cur_tile_data_address);
-            }
-
+            break;
+        case Fetch_Tile_Low:
             fetcher.state = Fetch_Tile_High;
-            }break;
+            break;
         case Fetch_Tile_High:
-            if(is_signed){
-                fetcher.cur_tile_data_high = (int8_t)read(fetcher.cur_tile_data_address + 1);
-            }else{
-                fetcher.cur_tile_data_high = (int8_t)read(fetcher.cur_tile_data_address + 1);
-            }
             fetcher.state = FIFO_Push;
             break;
         case FIFO_Push:
             for(int i = 0; i < 8; i++){
-                uint32_t color = get_color(
-                    fetcher.cur_tile_data_low, fetcher.cur_tile_data_high, i);
-                ppu.pixel_buffer[fetcher.cur_pixel + i][read(LY)] = color;
+                ppu.pixel_buffer[fetcher.cur_pixel + i][read(LY)] = 0xFF0000FF;
             }
-
             fetcher.cur_pixel += 8;
             fetcher.state = Fetch_Tile_NO;
             break;
@@ -209,18 +145,16 @@ update_fetcher(word tile_no_baseptr, word bg_tiledata_baseptr, byte is_signed, b
     }
 }
 
-int update_graphics(int cycles){
-    printf("LY = %i", read(LY));
-    cycle_ppu(cycles);
+int update_graphics(int cpu_cycles){
     if(read(LCDC) & (1 << 7)){
-        ppu.scanline_counter -= cycles;
+        ppu.cycles += cpu_cycles;
+        cycle_ppu(cpu_cycles);
     }else{
         //lcdc disabled, reset STAT and scanline
-        ppu.scanline_counter = 456;
+        ppu.cycles = 0;
+        fetcher.cur_pixel = 0;
+        ppu.state = OAM_Search;
         write(LY, 0);
-        byte status = read(STAT);
-        status &= 252;
-        write(STAT, status);
     }
     
     if(ppu.update_display){
@@ -241,5 +175,21 @@ static uint32_t get_color(byte tile_high, byte tile_low, int bit_position) {
         case 2: return 0x555555FF; // Dark gray
         case 3: return 0x000000FF; // Black
         default: return 0xFFFFFFFF;
+    }
+}
+
+static void calc_tile_offsets(){
+    if(read(LCDC) & (1 << 4)){
+        fetcher.tile_data_bp = 0x8000;
+        fetcher.is_signed = 0;
+    }else{
+        fetcher.tile_data_bp = 0x8800;
+        fetcher.is_signed = 1;
+    }
+
+    if(read(LCDC) & (1 << 3)){
+        fetcher.tile_map_bp = 0x9C00;
+    }else{
+        fetcher.tile_map_bp = 0x9800;
     }
 }

@@ -55,7 +55,6 @@ void sdl_shutdown(){
 
 void update_display_buffer(uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT]){
     SDL_UpdateTexture(display_texture, NULL, pixel_buffer, WINDOW_WIDTH * sizeof(uint32_t));
-
 }
 
 int render_display(){

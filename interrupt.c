@@ -16,7 +16,7 @@ void service_interrupt(int interrupt){
 
     switch(interrupt){ 
         case 0: PC = 0x40; break; //vblank
-        case 1: PC = 0x48; break; //LCD
+        case 1: PC = 0x48; break; //LCD / STAT
         case 2: PC = 0x50; break; //Timer
         case 3: PC = 0x58; break; //serial
         case 4: PC = 0x60; break; //Joypad

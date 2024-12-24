@@ -21,8 +21,8 @@ typedef enum{
 }ppu_state;
 
 typedef struct{
-    ppu_state ppu_state;
-    int scanline_counter;
+    ppu_state state;
+    int cycles;
     int color_palette[4];
     int update_display;
     int is_window;
@@ -40,13 +40,15 @@ typedef enum{
 
 typedef struct{
     fetcher_state state;
-    byte cycle_counter;
+    int is_signed;
     int cur_pixel;
-    byte cur_tile_no;
-    byte cur_tile_data_low;
-    byte cur_tile_data_high;
-    word cur_tile_data_address;
-    int ticks;
+    word tile_data_bp;
+    word tile_map_bp;
+    byte cur_tile_x;
+    byte cur_tile_y;
+    byte tile_no;
+    word tile_low;
+    word tile_high;
 }FETCHER;
 
 extern void ppu_init();
