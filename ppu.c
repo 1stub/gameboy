@@ -78,10 +78,16 @@ static void cycle_ppu(int cpu_cycles){
             break;
 
         case Pixel_Transfer:
-            update_fetcher();
+            //each fetcher state takes two T cycles, so we need to 
+            //make sure to update as much as possible given cpu cycles
+            //seems to be running too much here, so leavign as is for now
+            //for( ; cpu_cycles >= 0; cpu_cycles -= 2){
+                update_fetcher();
+            //}
             if(fetcher.cur_pixel == 160){
                 fetcher.cur_pixel = 0;
-                write(STAT, (read(STAT) | 0xFC) | 0x00);
+                write(STAT, (read(STAT) | 0xFC) | 0x00); //enter HBlank
+                if (read(STAT) & (1 << 3)) request_int = 1; // HBlank interrupt enabled
                 ppu.state = HBlank;
             }
             break;
@@ -91,10 +97,12 @@ static void cycle_ppu(int cpu_cycles){
                 ppu.cycles = 0;
                 mmu.memory[LY]++;
                 if(read(LY) == 144){
+                    request_interrupt(0);
                     write(STAT, (read(STAT) | 0xFC) | 0x01);
                     ppu.state = VBlank;
                 }else{
-                    write(STAT, (read(STAT) | 0xFC) | 0x02);
+                    write(STAT, (read(STAT) | 0xFC) | 0x02); 
+                    if (read(STAT) & (1 << 5)) request_int = 1; // OAM interrupt enabled
                     ppu.state = OAM_Search;
                 }
             }
@@ -110,6 +118,7 @@ static void cycle_ppu(int cpu_cycles){
                     write(LY, 0);
                     ppu.cycles = 0; 
                     write(STAT, (read(STAT) | 0xFC) | 0x02);
+                    if (read(STAT) & (1 << 5)) request_int = 1; // OAM interrupt enabled
                     ppu.state = OAM_Search;
                 }
             }
@@ -135,30 +144,39 @@ static void update_fetcher(){
             fetcher.state = FIFO_Push;
             break;
         case FIFO_Push:
-            for(int i = 0; i < 8; i++){
-                ppu.pixel_buffer[fetcher.cur_pixel + i][read(LY)] = 0xFF0000FF;
+            {
+                int max = fetcher.cur_pixel + 8;
+                for( ; fetcher.cur_pixel < max; fetcher.cur_pixel++){
+                    printf("pixel : %i, LY : %i\n", fetcher.cur_pixel, read(LY));
+                    ppu.pixel_buffer[fetcher.cur_pixel][read(LY)] = 0xAACAAAFF;
+                }
+                fetcher.state = Fetch_Tile_NO;
             }
-            fetcher.cur_pixel += 8;
-            fetcher.state = Fetch_Tile_NO;
             break;
         default: break;
     }
 }
 
 int update_graphics(int cpu_cycles){
-    if(read(LCDC) & (1 << 7)){
+    /*if(read(LCDC) & (1 << 7)){
         ppu.cycles += cpu_cycles;
         cycle_ppu(cpu_cycles);
     }else{
         //lcdc disabled, reset STAT and scanline
+        //currently our lcdc status bit gets set around ly == 148.
+        //not sure why
         ppu.cycles = 0;
         fetcher.cur_pixel = 0;
         ppu.state = OAM_Search;
         write(LY, 0);
-    }
+    }*/
     
+    ppu.cycles += cpu_cycles;
+    cycle_ppu(cpu_cycles);
+
     if(ppu.update_display){
         ppu.update_display = 0;
+        update_display_buffer(ppu.pixel_buffer);
         return render_display(); 
     }
     return 1; 
