@@ -65,6 +65,7 @@ void ppu_init(){
 //
 //TODO: add stat flags upon state transfers to call lcd interrupt
 static void cycle_ppu(int cpu_cycles){
+    ppu.cycles += cpu_cycles;
     int request_int = 0;
 
     switch(ppu.state){
@@ -80,7 +81,6 @@ static void cycle_ppu(int cpu_cycles){
         case Pixel_Transfer:
             //each fetcher state takes two T cycles, so we need to 
             //make sure to update as much as possible given cpu cycles
-            //seems to be running too much here, so leavign as is for now
             //for( ; cpu_cycles >= 0; cpu_cycles -= 2){
                 update_fetcher();
             //}
@@ -96,8 +96,9 @@ static void cycle_ppu(int cpu_cycles){
             if(ppu.cycles >= 456){
                 ppu.cycles = 0;
                 mmu.memory[LY]++;
+                //check ly=lyc
                 if(read(LY) == 144){
-                    request_interrupt(0);
+                    request_interrupt(0); //vblank interrupt
                     write(STAT, (read(STAT) | 0xFC) | 0x01);
                     ppu.state = VBlank;
                 }else{
@@ -112,11 +113,12 @@ static void cycle_ppu(int cpu_cycles){
             if(ppu.cycles >= 456){
                 ppu.cycles = 0;
                 mmu.memory[LY]++;
+                //check ly=lyc
                 if(read(LY) == 153){
                     //update display at end of frame
-                    ppu.update_display = 1;
-                    write(LY, 0);
+                    ppu.update_display = 1; 
                     ppu.cycles = 0; 
+                    write(LY, 0);
                     write(STAT, (read(STAT) | 0xFC) | 0x02);
                     if (read(STAT) & (1 << 5)) request_int = 1; // OAM interrupt enabled
                     ppu.state = OAM_Search;
@@ -134,21 +136,46 @@ static void cycle_ppu(int cpu_cycles){
 
 static void update_fetcher(){
     switch(fetcher.state){
-        case Fetch_Tile_NO:
-            fetcher.state = Fetch_Tile_Low;
+        case Fetch_Tile_NO:{
+                word tile_row = ((byte)((read(LY) + read(SCY))/8))*32;
+                word tile_col = ((byte)(fetcher.cur_pixel + read(SCX))) / 8;
+
+                word addr = fetcher.tile_map_bp + tile_row + tile_col;
+                fetcher.tile_no = read(addr);
+
+                if(fetcher.is_signed){
+                    fetcher.tile_no = (int8_t)read(addr);
+                }
+
+                fetcher.tile_loc = fetcher.tile_data_bp + fetcher.tile_no * 16;
+                if(fetcher.is_signed){
+                   fetcher.tile_loc = fetcher.tile_data_bp + ((fetcher.tile_no + 128) * 16);
+                }
+                fetcher.state = Fetch_Tile_Low;
+            }
             break;
-        case Fetch_Tile_Low:
-            fetcher.state = Fetch_Tile_High;
+        case Fetch_Tile_Low:{
+                word line = (read(LY) % 8) * 2;
+                fetcher.tile_low = 
+                    read(fetcher.tile_loc + line);  
+
+                fetcher.state = Fetch_Tile_High;
+            }
             break;
-        case Fetch_Tile_High:
-            fetcher.state = FIFO_Push;
+        case Fetch_Tile_High:{
+                word line = (read(LY) % 8) * 2;
+                fetcher.tile_high = 
+                    read(fetcher.tile_loc + line + 1);  
+                fetcher.state = FIFO_Push;
+            }
             break;
         case FIFO_Push:
             {
-                int max = fetcher.cur_pixel + 8;
-                for( ; fetcher.cur_pixel < max; fetcher.cur_pixel++){
-                    printf("pixel : %i, LY : %i\n", fetcher.cur_pixel, read(LY));
-                    ppu.pixel_buffer[fetcher.cur_pixel][read(LY)] = 0xAACAAAFF;
+                for(int i = 0; i < 8; i++){
+                    if(fetcher.cur_pixel == 160) break;
+                    ppu.pixel_buffer[fetcher.cur_pixel][read(LY)] = 
+                        get_color(fetcher.tile_high, fetcher.tile_low, i);
+                    fetcher.cur_pixel++;
                 }
                 fetcher.state = Fetch_Tile_NO;
             }
@@ -158,20 +185,6 @@ static void update_fetcher(){
 }
 
 int update_graphics(int cpu_cycles){
-    /*if(read(LCDC) & (1 << 7)){
-        ppu.cycles += cpu_cycles;
-        cycle_ppu(cpu_cycles);
-    }else{
-        //lcdc disabled, reset STAT and scanline
-        //currently our lcdc status bit gets set around ly == 148.
-        //not sure why
-        ppu.cycles = 0;
-        fetcher.cur_pixel = 0;
-        ppu.state = OAM_Search;
-        write(LY, 0);
-    }*/
-    
-    ppu.cycles += cpu_cycles;
     cycle_ppu(cpu_cycles);
 
     if(ppu.update_display){
@@ -184,8 +197,8 @@ int update_graphics(int cpu_cycles){
 
 //this is used to get color data for our buffer to send to sdl texture
 static uint32_t get_color(byte tile_high, byte tile_low, int bit_position) { 
-    int color_id = (tile_high & (1 >> (7 - bit_position))) |
-        (tile_low & (1 >> (7 - bit_position))) << 1;
+    int color_id = ((tile_high >> bit_position) & 0x01) |
+        ((tile_low >> bit_position) & 0x01) << 1;
     //would be better if I use the pallet in memory, fine for now
     switch (color_id) {
         case 0: return 0xFFFFFFFF; // White

@@ -47,6 +47,7 @@ typedef struct{
     byte cur_tile_x;
     byte cur_tile_y;
     byte tile_no;
+    word tile_loc;
     word tile_low;
     word tile_high;
 }FETCHER;
