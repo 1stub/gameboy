@@ -28,6 +28,7 @@ static void
 update_fetcher();
 static uint32_t get_color(byte tile_high, byte tile_low, int bit_position);
 static void calc_tile_offsets();
+static void check_lyc_int();
 
 void ppu_init(){
     ppu.cycles = 0;
@@ -65,26 +66,34 @@ void ppu_init(){
 //
 //TODO: add stat flags upon state transfers to call lcd interrupt
 static void cycle_ppu(int cpu_cycles){
+    /*if (!(read(LCDC) & (1 << 7))) { // LCDC bit 7
+        ppu.cycles = 0;
+        fetcher.cur_pixel = 0;
+        write(STAT, read(STAT) & 0xFC);
+        write(LY, 0);
+        return;
+    }*/
+
     ppu.cycles += cpu_cycles;
     int request_int = 0;
 
     switch(ppu.state){
         case OAM_Search:
             if(ppu.cycles >= 80){
-                //prepare offsets for entering pixel transfer
-                calc_tile_offsets();
+                ppu.cycles -= 80;
+                calc_tile_offsets(); //prepare offsets for entering pixel transfer
                 write(STAT, (read(STAT) | 0xFC) | 0x03);
                 ppu.state = Pixel_Transfer;
             }
             break;
 
         case Pixel_Transfer:
-            //each fetcher state takes two T cycles, so we need to 
-            //make sure to update as much as possible given cpu cycles
-            //for( ; cpu_cycles >= 0; cpu_cycles -= 2){
+            //while(cpu_cycles){
                 update_fetcher();
+                cpu_cycles-=2;
             //}
             if(fetcher.cur_pixel == 160){
+                ppu.cycles -= 172; 
                 fetcher.cur_pixel = 0;
                 write(STAT, (read(STAT) | 0xFC) | 0x00); //enter HBlank
                 if (read(STAT) & (1 << 3)) request_int = 1; // HBlank interrupt enabled
@@ -93,13 +102,16 @@ static void cycle_ppu(int cpu_cycles){
             break;
 
         case HBlank:
-            if(ppu.cycles >= 456){
-                ppu.cycles = 0;
+            if(ppu.cycles >= 204){
+                ppu.cycles -= 204;
                 mmu.memory[LY]++;
-                //check ly=lyc
+                check_lyc_int();
+
                 if(read(LY) == 144){
+                    ppu.update_display = 1; 
                     request_interrupt(0); //vblank interrupt
-                    write(STAT, (read(STAT) | 0xFC) | 0x01);
+                    write(STAT, (read(STAT) | 0xFC) | 0x01); //vblank mode
+                    if (read(STAT) & (1 << 4)) request_int = 1; // vblank interrupt enabled
                     ppu.state = VBlank;
                 }else{
                     write(STAT, (read(STAT) | 0xFC) | 0x02); 
@@ -111,12 +123,12 @@ static void cycle_ppu(int cpu_cycles){
 
         case VBlank:
             if(ppu.cycles >= 456){
-                ppu.cycles = 0;
+                ppu.cycles -= 456;
                 mmu.memory[LY]++;
-                //check ly=lyc
+                check_lyc_int();
+
                 if(read(LY) == 153){
                     //update display at end of frame
-                    ppu.update_display = 1; 
                     ppu.cycles = 0; 
                     write(LY, 0);
                     write(STAT, (read(STAT) | 0xFC) | 0x02);
@@ -137,25 +149,23 @@ static void cycle_ppu(int cpu_cycles){
 static void update_fetcher(){
     switch(fetcher.state){
         case Fetch_Tile_NO:{
-                word tile_row = ((byte)((read(LY) + read(SCY))/8))*32;
-                word tile_col = ((byte)(fetcher.cur_pixel + read(SCX))) / 8;
+                word tile_row = ((byte)(((read(LY) + read(SCY)))/8))*32;
+                word tile_col = ((byte)(fetcher.cur_pixel + (read(SCX)))) / 8;
 
                 word addr = fetcher.tile_map_bp + tile_row + tile_col;
                 fetcher.tile_no = read(addr);
+                fetcher.tile_loc = fetcher.tile_data_bp + (fetcher.tile_no * 16);
 
                 if(fetcher.is_signed){
-                    fetcher.tile_no = (int8_t)read(addr);
+                    fetcher.tile_no = (int8_t)read(addr); 
+                    fetcher.tile_loc = fetcher.tile_data_bp + ((fetcher.tile_no + 128) * 16);
                 }
 
-                fetcher.tile_loc = fetcher.tile_data_bp + fetcher.tile_no * 16;
-                if(fetcher.is_signed){
-                   fetcher.tile_loc = fetcher.tile_data_bp + ((fetcher.tile_no + 128) * 16);
-                }
                 fetcher.state = Fetch_Tile_Low;
             }
             break;
         case Fetch_Tile_Low:{
-                word line = (read(LY) % 8) * 2;
+                word line = ((read(LY) + read(SCY)) % 8) * 2;
                 fetcher.tile_low = 
                     read(fetcher.tile_loc + line);  
 
@@ -163,7 +173,7 @@ static void update_fetcher(){
             }
             break;
         case Fetch_Tile_High:{
-                word line = (read(LY) % 8) * 2;
+                word line = ((read(LY) + read(SCY)) % 8) * 2;
                 fetcher.tile_high = 
                     read(fetcher.tile_loc + line + 1);  
                 fetcher.state = FIFO_Push;
@@ -190,9 +200,9 @@ int update_graphics(int cpu_cycles){
     if(ppu.update_display){
         ppu.update_display = 0;
         update_display_buffer(ppu.pixel_buffer);
-        return render_display(); 
+        return 1; 
     }
-    return 1; 
+    return 0; 
 }
 
 //this is used to get color data for our buffer to send to sdl texture
@@ -206,6 +216,18 @@ static uint32_t get_color(byte tile_high, byte tile_low, int bit_position) {
         case 2: return 0x555555FF; // Dark gray
         case 3: return 0x000000FF; // Black
         default: return 0xFFFFFFFF;
+    }
+}
+
+static void check_lyc_int(){
+    byte lyc = read(LYC);
+    byte ly = read(LY);
+    
+    //write coincidence flag
+    write(STAT, read(STAT) | (ly == lyc) << 2);
+
+    if(ly == lyc && (read(STAT) & (1 << 6))){
+        request_interrupt(1);
     }
 }
 
