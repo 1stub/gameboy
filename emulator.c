@@ -1,9 +1,14 @@
 #include "emulator.h"
 #include "display.h"
 
+#include <cjson/cJSON.h>
+#include <dirent.h>
+
 #define CPU_FREQ 4194304
 #define FPS 60
 #define FRAME_HISTORY_SIZE 10
+
+static void run_json_tests();
 
 //we need to ensure that our emulator is running at roughly 60 fps,
 //so mych of this code is output just to ensure we are close to
@@ -20,11 +25,7 @@ void emulate(int debug){
     while(run){
         Uint64 this_frame = SDL_GetPerformanceCounter();
         
-        if(debug) print_registers();
-        if(!debug){
-            char out = perform_serial();
-            if(out != '\0') printf("%c", out);
-        }
+        if(debug) ; //run_json_tests();
 
         byte cycles = cycle(); 
         update_timers(cycles);
@@ -45,7 +46,7 @@ void emulate(int debug){
             }
             avg_frame_time /= FRAME_HISTORY_SIZE;
 
-            printf("frame diff = %.3f ms, avg frame time = %.3f ms\n", frame_diff, avg_frame_time);
+            //printf("frame diff = %.3f ms, avg frame time = %.3f ms\n", frame_diff, avg_frame_time);
 
             prev_frame = this_frame;
 
@@ -53,3 +54,32 @@ void emulate(int debug){
         }
     }
 }
+
+//currently decided to go back and make sure we are passing BOTH json cpu
+//tests and blargg tests. Could be part of our ppu problems.
+
+//following methods are used if we want to test cpu json tests
+//https://www.geeksforgeeks.org/c-program-list-files-sub-directories-directory/
+//https://www.geeksforgeeks.org/cjson-json-file-write-read-modify-in-c/
+
+//this is broke still
+/*static void run_json_tests(){
+    struct dirent *de;
+    DIR *dr = opendir("./sm83/v1/");
+    if(dr == NULL){
+        printf("Unable to open directory");
+        return;
+    }
+
+    while((de = readdir(dr)) != NULL){
+        char loc[256];  
+        snprintf(loc, sizeof(loc), "./sm83/v1/%s", de->d_name);
+
+        FILE *fp = fopen(loc, "r");
+        if(fp == NULL){
+            printf("Unable to open json file");
+        }
+        printf("%s\n", de->d_name);
+    }
+    closedir(dr);
+}*/
