@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=c23 $(shell sdl2-config --cflags)
-LDFLAGS = $(shell sdl2-config --libs)
+LDFLAGS = $(shell sdl2-config --libs) -lm
 TARGET = gameboy 
 SRCS = mmu.c cpu.c debugger.c display.c ppu.c interrupt.c timer.c emulator.c main.c   
 OBJS = $(SRCS:.c=.o)

@@ -2,6 +2,7 @@
 #define DISPLAY_H
 
 #include <SDL2/SDL.h>
+
 #include "util.h"
 
 extern void display_init();

@@ -1,6 +1,5 @@
 #include "display.h"
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_video.h>
+#include "debugger.h"
 
 SDL_Window* main_window;
 SDL_Renderer* main_renderer;
@@ -34,6 +33,8 @@ void display_init(){
         WINDOW_WIDTH,
         WINDOW_HEIGHT
     );
+
+    init_nuklear(main_renderer, main_window); 
 }
 
 void sdl_shutdown(){
@@ -61,6 +62,7 @@ int render_display(){
     static int running = 1;
 
     //check for escape key to close window
+    start_nk_input();
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) {
             running = 0;
@@ -70,9 +72,13 @@ int render_display(){
             }
         }
     }
+    end_nk_input();
+
     if(running){
         SDL_RenderClear(main_renderer);
         SDL_RenderCopy(main_renderer, display_texture, NULL, NULL);
+
+        update_debugger(&e);
         SDL_RenderPresent(main_renderer);
     }
     return running;
