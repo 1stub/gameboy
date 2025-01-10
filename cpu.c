@@ -35,7 +35,7 @@ void cpu_init(){
     BC = 0x0013;
     DE = 0x00D8;
     HL = 0x014D;
-    PC = 0x100;
+    PC = 0x0100;
     SP = 0xFFFE; 
     IME = 0;
     cpu.cycles = 0;

@@ -2,24 +2,6 @@
 #include "display.h"
 #include "interrupt.h"
 
-//this code sucks
-//sucks HARD as shit. some hot garbage I hate it
-//when I find the time (after finals) I need to rewrite EVERTHING
-//well maybe not everything (display using texture of pixels is fine)
-//
-//i now have the "general" understanding of what I need to do in the ppu
-//so HOPEFULLY a ppu rewrite will end up getting some bg tiles on the display
-//i'm sure there are going to be even more rewrites and reiterations
-//but for now just a general rewrite with my "deeper" understanding of what
-//the ppu actually does should put me in a good enough spot to get some real
-//proper pixels on the screen
-//
-//the main problem that i am aware of is that i just compute offsets for tile
-//data wrong. i am almost 100% sure of this. also issues likely arrise due to
-//poor interrupt timing and overally lack of sync with the cpu. i think though
-//there should still be some proper pixels being drawn even if this shit
-//is not cycle accurate.
-
 PPU ppu;
 FETCHER fetcher;
 
@@ -57,25 +39,18 @@ void ppu_init(){
     fetcher.tile_high = 0;
 }
 
-//we need to set flags upon ppu state transfer
-//we will set necessary flags, raise STAT interrupt request
-//then call handler
-//
-//also current issue is related to the fact that our ppu never reaches the
-//ly == 153 condition causing us to never display anything
-//
-//TODO: add stat flags upon state transfers to call lcd interrupt
 static void cycle_ppu(int cpu_cycles){
-    /*if (!(read(LCDC) & (1 << 7))) { // LCDC bit 7
-        ppu.cycles = 0;
-        fetcher.cur_pixel = 0;
-        write(STAT, read(STAT) & 0xFC);
-        write(LY, 0);
-        return;
-    }*/
+    if (!(read(LCDC) & (1 << 7))) { // LCDC enable
+        if(ppu.cycles >= 70224){
+            ppu.cycles -= 70224;
+        }
+        return ;
+    }
 
     ppu.cycles += cpu_cycles;
     int request_int = 0;
+
+    static int elapsed_cycles = 0;
 
     switch(ppu.state){
         case OAM_Search:
@@ -88,12 +63,11 @@ static void cycle_ppu(int cpu_cycles){
             break;
 
         case Pixel_Transfer:
-            //while(cpu_cycles){
-                update_fetcher();
-                cpu_cycles-=2;
-            //}
+            update_fetcher();
+            elapsed_cycles += cpu_cycles;
             if(fetcher.cur_pixel == 160){
-                ppu.cycles -= 172; 
+                ppu.cycles -= elapsed_cycles;
+                elapsed_cycles = 0;
                 fetcher.cur_pixel = 0;
                 write(STAT, (read(STAT) | 0xFC) | 0x00); //enter HBlank
                 if (read(STAT) & (1 << 3)) request_int = 1; // HBlank interrupt enabled
@@ -108,7 +82,6 @@ static void cycle_ppu(int cpu_cycles){
                 check_lyc_int();
 
                 if(read(LY) == 144){
-                    ppu.update_display = 1; 
                     request_interrupt(0); //vblank interrupt
                     write(STAT, (read(STAT) | 0xFC) | 0x01); //vblank mode
                     if (read(STAT) & (1 << 4)) request_int = 1; // vblank interrupt enabled
@@ -128,7 +101,8 @@ static void cycle_ppu(int cpu_cycles){
                 check_lyc_int();
 
                 if(read(LY) == 153){
-                    //update display at end of frame
+                    //update display at end of frame  
+                    ppu.update_display = 1; 
                     ppu.cycles = 0; 
                     write(LY, 0);
                     write(STAT, (read(STAT) | 0xFC) | 0x02);
@@ -236,7 +210,7 @@ static void calc_tile_offsets(){
         fetcher.tile_data_bp = 0x8000;
         fetcher.is_signed = 0;
     }else{
-        fetcher.tile_data_bp = 0x8800;
+        fetcher.tile_data_bp = 0x9000;
         fetcher.is_signed = 1;
     }
 

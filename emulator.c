@@ -1,7 +1,6 @@
 #include "emulator.h"
 #include "display.h"
 
-#include <cjson/cJSON.h>
 #include <dirent.h>
 
 #define CPU_FREQ 4194304
@@ -55,31 +54,11 @@ void emulate(int debug){
     }
 }
 
-//currently decided to go back and make sure we are passing BOTH json cpu
-//tests and blargg tests. Could be part of our ppu problems.
+static void read_json_file(){
+}
 
-//following methods are used if we want to test cpu json tests
-//https://www.geeksforgeeks.org/c-program-list-files-sub-directories-directory/
-//https://www.geeksforgeeks.org/cjson-json-file-write-read-modify-in-c/
+static void run_json_tests(){
 
-//this is broke still
-/*static void run_json_tests(){
-    struct dirent *de;
-    DIR *dr = opendir("./sm83/v1/");
-    if(dr == NULL){
-        printf("Unable to open directory");
-        return;
-    }
 
-    while((de = readdir(dr)) != NULL){
-        char loc[256];  
-        snprintf(loc, sizeof(loc), "./sm83/v1/%s", de->d_name);
 
-        FILE *fp = fopen(loc, "r");
-        if(fp == NULL){
-            printf("Unable to open json file");
-        }
-        printf("%s\n", de->d_name);
-    }
-    closedir(dr);
-}*/
+}

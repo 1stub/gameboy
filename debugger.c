@@ -34,13 +34,11 @@ void init_nuklear(SDL_Renderer* r, SDL_Window *w){
 }
 
 void update_debugger(SDL_Event *e){
-    // Start Nuklear window and add widgets
-    if(nk_begin(ctx, "Example", nk_rect(10, 10, 200, 200), NK_WINDOW_TITLE | NK_WINDOW_MOVABLE )){
+    if(nk_begin(ctx, "Registers", nk_rect(300, 10, 200, 200), NK_WINDOW_TITLE | NK_WINDOW_MOVABLE )){
 
     }
     nk_end(ctx);
 
-    // Render the Nuklear commands using OpenGL or SDL
     nk_sdl_render(NK_ANTI_ALIASING_ON);
 }
 
