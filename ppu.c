@@ -123,8 +123,8 @@ static void cycle_ppu(int cpu_cycles){
 static void update_fetcher(){
     switch(fetcher.state){
         case Fetch_Tile_NO:{
-                word tile_row = ((byte)(((read(LY) + read(SCY)))/8))*32;
-                word tile_col = ((byte)(fetcher.cur_pixel + (read(SCX)))) / 8;
+                word tile_row = ((byte)(((read(LY) + read(SCY)) & 0xFF)/8)) * 32;
+                word tile_col = ((byte)(fetcher.cur_pixel + (read(SCX) / 8))) / 8;
 
                 word addr = fetcher.tile_map_bp + tile_row + tile_col;
                 fetcher.tile_no = read(addr);
@@ -155,9 +155,9 @@ static void update_fetcher(){
             break;
         case FIFO_Push:
             {
-                for(int i = 0; i < 8; i++){
+                for(int i = 7; i >= 0; i--){
                     if(fetcher.cur_pixel == 160) break;
-                    ppu.pixel_buffer[fetcher.cur_pixel][read(LY)] = 
+                    ppu.pixel_buffer[read(LY)][fetcher.cur_pixel] = 
                         get_color(fetcher.tile_high, fetcher.tile_low, i);
                     fetcher.cur_pixel++;
                 }
