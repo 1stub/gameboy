@@ -13,6 +13,30 @@
 // If LY is > 144 then we reached the max number of 
 // posible scanlines and need to enter vblank
 
+#define LCDC_LINE_CYCLES 456
+
+//each ppu mode takes these number of cycles
+#define LCDC_MODE_OAM_CYCLES 80
+#define LCDC_MODE_PIXEL_CYCLES 172
+#define LCDC_MODE_HBLANK_CYCLES 204
+
+//these values correspond to bits 0 and 1 in STAT
+#define OAM_NUM 0x02
+#define PIXEL_TRANSFER_NUM 0x03
+#define HBLANK_NUM 0x00
+#define VBLANK_NUM 0x01
+
+//actual value of LY
+#define LY_VAL read(LY)
+
+//checks if the flag is set, if it is request LCD interrupt
+#define DO_STAT_INTERRUPTS(state)       \
+    do{                                 \
+        if(read(STAT) & (1 << state)){  \
+            request_interrupt(1);       \
+        }                               \
+    }while(0)
+
 typedef enum{
     OAM_Search,
     Pixel_Transfer,
@@ -24,33 +48,18 @@ typedef struct{
     ppu_state state;
     int cycles;
     int color_palette[4];
-    int update_display;
+    int should_update_display;
     int is_window;
     uint32_t pixel_buffer[WINDOW_WIDTH][WINDOW_HEIGHT];
 }PPU;
 
-extern PPU ppu;
-
-typedef enum{
-    Fetch_Tile_NO,
-    Fetch_Tile_Low,
-    Fetch_Tile_High,
-    FIFO_Push 
-}fetcher_state;
-
 typedef struct{
-    fetcher_state state;
+    int tile_data_bp;
+    int tile_map_bp;
     int is_signed;
-    int cur_pixel;
-    word tile_data_bp;
-    word tile_map_bp;
-    byte cur_tile_x;
-    byte cur_tile_y;
-    byte tile_no;
-    word tile_loc;
-    word tile_low;
-    word tile_high;
-}FETCHER;
+} TileOffsets;
+
+extern PPU ppu;
 
 extern void ppu_init();
 extern int update_graphics(int cycles);
