@@ -5,7 +5,9 @@
 PPU ppu;
 
 static void cycle_ppu(int cycles);
+static void update_scanlines();
 static void update_bg_scanline();
+static void update_window_scanline();
 static uint32_t get_color(byte tile_high, byte tile_low, int bit_position);
 static TileOffsets calc_tile_offsets();
 static void check_lyc_int();
@@ -13,7 +15,6 @@ static void update_stat(int state);
 
 void ppu_init(){
     ppu.cycles = 0;
-
     ppu.state = OAM_Search;
     ppu.should_update_display = 0;
     ppu.is_window = 0;
@@ -41,17 +42,17 @@ static void cycle_ppu(int cpu_cycles){
 
         case Pixel_Transfer:
             if(ppu.cycles >= LCDC_MODE_PIXEL_CYCLES){
-                ppu.cycles -= LCDC_MODE_OAM_CYCLES;
-                update_bg_scanline();
-                ppu.state = Pixel_Transfer;
+                ppu.cycles -= LCDC_MODE_PIXEL_CYCLES;
+                update_scanlines();
                 update_stat(HBLANK_NUM);
+                ppu.state = HBlank;
             }
             break;
 
         case HBlank:
             if(ppu.cycles >= LCDC_MODE_HBLANK_CYCLES){
                 ppu.cycles -= LCDC_MODE_HBLANK_CYCLES;
-                mmu.memory[LY] += 1;
+                mmu.memory[LY]++;
                 check_lyc_int();
 
                 if(LY_VAL == 144){
@@ -60,21 +61,23 @@ static void cycle_ppu(int cpu_cycles){
                     ppu.state = VBlank;
                 }else{
                     update_stat(OAM_NUM);
-                    ppu.state = OAM_NUM;
+                    ppu.state = OAM_Search;
                 }
             }
             break;
 
         case VBlank:
-            if(ppu.cycles >= 456){
-                ppu.cycles -= 456;
-                mmu.memory[LY] += 1;
+            if(ppu.cycles >= LCDC_LINE_CYCLES){
+                ppu.cycles -= LCDC_LINE_CYCLES;
+                mmu.memory[LY]++;
                 check_lyc_int();
 
                 if(LY_VAL == 153){
+                    ppu.cycles = 0;
                     ppu.should_update_display = 1;
                     write(LY, 0);
                     update_stat(OAM_NUM);
+                    ppu.state = OAM_Search;
                 }
             }
             break;
@@ -83,20 +86,60 @@ static void cycle_ppu(int cpu_cycles){
     }
 }
 
-//decided to just render whole scanline at once
-static void update_bg_scanline(){
+static void update_scanlines(){
+    byte lcdc_val = read(LCDC);
+    if(lcdc_val & (1 << 5)){
+        // render window
+        update_bg_scanline(); //rhis should be window
+        printf("rendering window!\n");
+    }
+    if(lcdc_val & (1 << 0)){
+        update_bg_scanline();
+    }
+}
+
+static void update_bg_scanline() {
     TileOffsets offsets = calc_tile_offsets();
     int tile_data_bp = offsets.tile_data_bp;
     int tile_map_bp = offsets.tile_map_bp;
     int is_signed = offsets.is_signed;
 
-    byte tile_data_low = 0x00;
-    byte tile_data_high = 0x00;
+    byte scanline = LY_VAL;
 
-    for(int i = 0; i < 160; i++){
-        ppu.pixel_buffer[LY_VAL][i] = 
-            get_color(tile_data_high, tile_data_low, i);
+    byte scroll_x = read(SCX);
+    byte scroll_y = read(SCY);
+
+    for (int x = 0; x < 160; x++) {
+        int map_x = (scroll_x + x) & 0xFF;
+        int map_y = (scroll_y + scanline) & 0xFF;
+
+        word tile_row = (map_y / 8) * 32; // Each row contains 32 tiles
+        word tile_col = map_x / 8;
+
+        word tile_map_addr = tile_map_bp + tile_row + tile_col;
+        byte tile_id = read(tile_map_addr);
+
+        word tile_data_offset;
+        if (is_signed) {
+            int8_t signed_id = (int8_t)tile_id;
+            tile_data_offset = tile_data_bp + (signed_id * 16);
+        } else {
+            tile_data_offset = tile_data_bp + (tile_id * 16);
+        }
+
+        int tile_x_pixel = 7 - (map_x % 8); // Tiles are stored with pixels mirrored in X
+        int tile_y_pixel = map_y % 8;
+
+        word pixel_offset = tile_data_offset + (tile_y_pixel * 2);
+        byte tile_data_low = read(pixel_offset);
+        byte tile_data_high = read(pixel_offset + 1);
+
+        ppu.pixel_buffer[scanline][x] = get_color(tile_data_high, tile_data_low, tile_x_pixel);
     }
+}
+
+static void update_window_scanline(){
+
 }
 
 int update_graphics(int cpu_cycles){
@@ -148,6 +191,7 @@ static void check_lyc_int(){
 static TileOffsets 
 calc_tile_offsets(){
     TileOffsets offsets;
+    static int i = 0;
 
     if (read(LCDC) & (1 << 4)) {
         offsets.tile_data_bp = 0x8000;
@@ -157,11 +201,24 @@ calc_tile_offsets(){
         offsets.is_signed = 1;
     }
 
-    if (read(LCDC) & (1 << 3)) {
-        offsets.tile_map_bp = 0x9C00;
-    } else {
-        offsets.tile_map_bp = 0x9800;
+    if(read(LCDC) & (1 << 5)){
+        if (read(LCDC) & (1 << 6)) {
+            offsets.tile_map_bp = 0x9C00;
+        } else {
+            offsets.tile_map_bp = 0x9800;
+        }
+    }else{
+        if (read(LCDC) & (1 << 3)) {
+            offsets.tile_map_bp = 0x9C00;
+        } else {
+            offsets.tile_map_bp = 0x9800;
+        }
     }
+
+    if(!i){
+        printf("DATA: %x, MAP: %x\n", offsets.tile_data_bp, offsets.tile_map_bp);
+    }
+    i++;
 
     return offsets;
 }

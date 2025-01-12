@@ -57,6 +57,8 @@ void write(word address, byte value){
     else if(address >= 0x8000 && address <=0x9FFF){ 
         //printf("wrote %x to %x in VRAM\n", value, address);
         MEM[address] = value;
+    }else if(address <= 0x7FFF){
+        //do nothing, attempted to write to ROM
     }else{
         MEM[address] = value;
     }
