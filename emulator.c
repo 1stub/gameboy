@@ -7,7 +7,7 @@
 #define FPS 60
 #define FRAME_HISTORY_SIZE 10
 
-static void run_json_tests();
+#define CYCLE_ACCURATE
 
 //we need to ensure that our emulator is running at roughly 60 fps,
 //so mych of this code is output just to ensure we are close to
@@ -24,13 +24,23 @@ void emulate(int debug){
     while(run){
         Uint64 this_frame = SDL_GetPerformanceCounter();
         
-        if(debug) ; //run_json_tests();
-
+        int can_render_frame = 0;
+        #ifndef CYCLE_ACCURATE
         byte cycles = cycle(); 
         update_timers(cycles);
-        int can_render_frame = update_graphics(cycles);
+        can_render_frame = update_graphics(cycles);
         total_cycles += cycles;
         do_interrupts();
+
+        #else
+        byte cycles = cycle(); 
+        for(int i = 0; i < cycles; i+=4){
+            update_timers(4);
+            can_render_frame = update_graphics(4);
+            total_cycles += 4;
+        }
+        do_interrupts();
+        #endif
     
         if(can_render_frame && total_cycles >= (CPU_FREQ / FPS)){
             // Calculate frame time using high-resolution timer
@@ -52,13 +62,4 @@ void emulate(int debug){
             run = render_display(); 
         }
     }
-}
-
-static void read_json_file(){
-}
-
-static void run_json_tests(){
-
-
-
 }
