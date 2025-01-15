@@ -57,14 +57,21 @@ void write(word address, byte value){
     else if(address == LY){
         MEM[address] = 0x00;
     }
-    else if(address >= 0x8000 && address <=0x9FFF){ 
-        MEM[address] = value;
-    }
     else if(address <= 0x7FFF){
         //do nothing, attempted to write to ROM
     }
+    else if ((address >= 0xE000) && (address < 0xFE00))
+    {
+        //writing to echo writes in RAM
+        MEM[address] = value;
+        write(address - 0x2000, value);
+    }
+    else if((address >= 0xFEA0) && (address < 0xFEFF))
+    {
+        //restricted
+    }
     else if(address == 0xFF00){ //joypad, only bits 4 and 5 can be written to
-        MEM[address] = value & 0x30;
+        MEM[address] = (MEM[0xFF00] & 0x08) | (value & 0x30);
     }
     else if(address == 0xFF46){
         do_dma(value);
